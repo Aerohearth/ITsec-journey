@@ -7,7 +7,7 @@ Goal: Entry IT → SOC Analyst L1. This repo shows hands-on A+ labs, notes, and 
 
 ## Quick nav
 - [A+ Evidence Pack](A-plus/Evidence-Pack.md)
-- [Error Log (Google Sheet)](<[link-to-your-sheet](https://docs.google.com/spreadsheets/d/1h4dgAk7LGZrXH58QoyTvQjijONH4aJexEpeH-bE8hxg/edit?usp=sharing)>)
+- [Error Log (Google Sheet)](<(https://docs.google.com/spreadsheets/d/1h4dgAk7LGZrXH58QoyTvQjijONH4aJexEpeH-bE8hxg/edit?usp=sharing)>)
 - [Labs](labs/)
 - [SIEM/Wazuh](siem/wazuh/)
 - [Scripts](scripts/)
