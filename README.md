@@ -6,7 +6,7 @@ Goal: Entry IT → SOC Analyst L1. This repo shows hands-on A+ labs, notes, and 
 - SIEM starter: Wazuh AIO with Sysmon logs and first ATT&CK-mapped detections.
 
 ## Quick nav
-- [A+ Evidence Pack](a-plus/Evidence-Pack.md)
+- [A+ Evidence Pack](A-+/Evidence-Pack.md)
 - [Error Log (Google Sheet)](<link-to-your-sheet>)
 - [Labs](labs/)
 - [SIEM/Wazuh](siem/wazuh/)
