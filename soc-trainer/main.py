@@ -21,6 +21,7 @@ from rich.console import Console
 from config import ANTHROPIC_API_KEY
 from fetchers.cisa import get_recent_kev_entries, get_cisa_alerts, get_all_kev_stats
 from fetchers.nvd import get_recent_critical_cves, get_cve_by_id
+from processors.ir_simulator import SCENARIOS, get_iris_response, build_custom_prompt
 from processors.ai_processor import (
     generate_daily_briefing,
     analyze_vulnerability,
@@ -44,6 +45,11 @@ from ui.display import (
     stream_ai_response,
     prompt_user,
     confirm,
+    print_iris_banner,
+    print_scenario_menu,
+    stream_iris_response,
+    prompt_analyst_action,
+    print_ir_divider,
 )
 
 
@@ -55,6 +61,7 @@ MENU_ITEMS = [
     ("5", "Concept Explainer              — Ask about any security concept, get a SOC-focused answer"),
     ("6", "Knowledge Quiz                 — Test your skills on any topic"),
     ("7", "KEV Catalog Stats              — Overview of CISA's full exploit catalog"),
+    ("8", "Incident Response Simulator    — Live attack scenario, you make the decisions [IRIS]"),
     ("q", "Quit"),
 ]
 
@@ -267,6 +274,79 @@ def handle_quiz() -> None:
     )
 
 
+def handle_ir_sim() -> None:
+    print_section("Incident Response Simulator — IRIS")
+    print_iris_banner()
+    print_scenario_menu(SCENARIOS)
+
+    choice = prompt_user("Select a scenario [1-6]:")
+    if choice not in SCENARIOS:
+        print_error("Invalid selection.")
+        return
+
+    scenario = SCENARIOS[choice]
+
+    # Build the opening prompt
+    if choice == "6":
+        console.print(
+            "\n[dim]Describe the incident scenario you want to practise. "
+            "Be as specific or as vague as you like — IRIS will fill in the details.[/dim]\n"
+        )
+        custom = prompt_user("Describe your scenario:")
+        if not custom:
+            print_info("No description provided. Returning to menu.")
+            return
+        opening_prompt = build_custom_prompt(custom)
+    else:
+        opening_prompt = scenario["prompt"]
+
+    console.print(
+        f"\n[bold red]Starting:[/bold red] [white]{scenario['name']}[/white]  "
+        f"[dim]({scenario['difficulty']})[/dim]\n"
+        "[dim]IRIS is initialising the simulation environment...[/dim]\n"
+    )
+
+    # Conversation history — grows each turn
+    messages: list[dict] = [{"role": "user", "content": opening_prompt}]
+
+    # ── Simulation loop ───────────────────────────────────────────────────────
+    while True:
+        # Get IRIS response and stream it
+        response_text = stream_iris_response(get_iris_response(messages))
+
+        if not response_text:
+            print_error("No response from IRIS. Check your API key and connection.")
+            break
+
+        # Append IRIS response to history
+        messages.append({"role": "assistant", "content": response_text})
+
+        # Check if IRIS ended the sim (SCORE or QUIT was processed)
+        lowered = response_text.lower()
+        if any(phrase in lowered for phrase in (
+            "after-action review", "simulation complete", "final score",
+            "goodbye, analyst", "end of simulation"
+        )):
+            print_ir_divider()
+            print_success("Simulation ended. Run IRIS again to start a new scenario.")
+            break
+
+        # Get analyst action
+        print_ir_divider()
+        action = prompt_analyst_action()
+
+        if not action:
+            continue
+
+        # Allow local quit without sending to Claude
+        if action.upper() == "QUIT":
+            console.print("\n[dim]Exiting simulation. Good work, analyst.[/dim]\n")
+            break
+
+        # Append analyst action to history and loop
+        messages.append({"role": "user", "content": action})
+
+
 def handle_kev_stats() -> None:
     print_section("CISA KEV Catalog Statistics")
     print_info("Fetching full KEV catalog statistics...")
@@ -294,6 +374,7 @@ def main() -> None:
         "5": handle_concept_explainer,
         "6": handle_quiz,
         "7": handle_kev_stats,
+        "8": handle_ir_sim,
     }
 
     while True:
