@@ -264,3 +264,82 @@ def loading_spinner(message: str):
         TextColumn("[dim]{task.description}[/dim]"),
         transient=True,
     )
+
+
+# ── Incident Response Simulator UI ───────────────────────────────────────────
+
+def print_iris_banner() -> None:
+    """Print the IRIS simulation environment header."""
+    console.print()
+    console.print(
+        Panel(
+            "[bold red]I R I S[/bold red]  —  [bold white]Incident Response Intelligence System[/bold white]\n"
+            "[dim]A live cyberattack is unfolding. You are the analyst. Your decisions have consequences.[/dim]\n\n"
+            "[dim]Commands you can type at any time:[/dim]\n"
+            "  [bold yellow]TIMELINE[/bold yellow]  — full event timeline so far\n"
+            "  [bold yellow]IOC[/bold yellow]       — all indicators of compromise found\n"
+            "  [bold yellow]HINT[/bold yellow]      — get a nudge on your next action (-10 pts)\n"
+            "  [bold yellow]SCORE[/bold yellow]     — end the sim and get your after-action review\n"
+            "  [bold yellow]QUIT[/bold yellow]      — exit the simulation",
+            border_style="bold red",
+            padding=(1, 2),
+        )
+    )
+
+
+def print_scenario_menu(scenarios: dict) -> None:
+    """Print the IR scenario selection menu."""
+    console.print()
+    console.print(Rule("[bold red]Select a Scenario[/bold red]", style="red"))
+    console.print()
+
+    difficulty_colors = {
+        "EASY": "green",
+        "MEDIUM": "yellow",
+        "HARD": "red",
+        "variable": "cyan",
+    }
+
+    for key, scenario in scenarios.items():
+        diff = scenario["difficulty"]
+        color = difficulty_colors.get(diff, "white")
+        console.print(
+            f"  [bold red]{key}[/bold red]  "
+            f"[bold white]{scenario['name']}[/bold white]  "
+            f"[{color}][{diff}][/{color}]\n"
+            f"     [dim]{scenario['description']}[/dim]"
+        )
+        console.print()
+
+
+def stream_iris_response(generator) -> str:
+    """
+    Stream IRIS's response to the terminal.
+    Returns the full text for appending to message history.
+    """
+    console.print()
+    full_text = ""
+    try:
+        for chunk in generator:
+            console.print(chunk, end="", markup=False, highlight=False)
+            full_text += chunk
+    except KeyboardInterrupt:
+        console.print("\n[dim]Interrupted.[/dim]")
+    console.print("\n")
+    return full_text
+
+
+def prompt_analyst_action() -> str:
+    """Display the analyst action prompt and return input."""
+    console.print()
+    try:
+        action = console.input(
+            "[bold red]ANALYST ACTION[/bold red] [dim]>[/dim] "
+        )
+        return action.strip()
+    except (EOFError, KeyboardInterrupt):
+        return "QUIT"
+
+
+def print_ir_divider() -> None:
+    console.print(Rule(style="dim red"))

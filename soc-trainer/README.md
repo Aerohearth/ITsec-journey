@@ -32,6 +32,7 @@ Built for people working toward their first SOC analyst role. Every session uses
 | **Concept Explainer** | Any security term explained from a SOC analyst's perspective |
 | **Knowledge Quiz** | Multiple-choice quiz on any topic, with answers and explanations |
 | **KEV Stats** | Overview of the full CISA exploit catalog — top vendors, totals |
+| **Incident Response Simulator** | Live attack scenario — you make the decisions, IRIS reacts |
 
 All AI output is structured consistently:
 
@@ -169,6 +170,37 @@ Choose a topic and number of questions (1–15). Each question is multiple choic
 
 Displays high-level statistics about the full CISA KEV catalog — total entries, catalog version, and the top vendors most frequently targeted by known exploits.
 
+### Incident Response Simulator (IRIS)
+
+A fully reactive, multi-turn incident response training environment. IRIS plays the role of a simulated enterprise SOC environment. You play the on-call analyst. A real cyberattack is unfolding — your decisions determine the outcome.
+
+**Available scenarios:**
+
+| # | Scenario | Difficulty |
+|---|---|---|
+| 1 | Ransomware Outbreak | Medium |
+| 2 | Phishing → Lateral Movement | Medium |
+| 3 | Insider Threat / Data Exfiltration | Hard |
+| 4 | APT Intrusion | Hard |
+| 5 | Business Email Compromise | Easy |
+| 6 | Custom — describe your own incident | Variable |
+
+**How it works:**
+1. IRIS presents the initial alert that triggered the incident
+2. You type your action (e.g. `isolate WKSTN-FIN-A4K from the network`, `pull Splunk logs for user jsmith`, `escalate to IR team`)
+3. IRIS responds with realistic consequences — good decisions reveal evidence, poor ones let the attacker progress
+4. Continue until the incident is resolved or you type `SCORE`
+
+**Special commands during a simulation:**
+
+| Command | Effect |
+|---|---|
+| `TIMELINE` | Print every event that has occurred so far |
+| `IOC` | List all indicators of compromise discovered |
+| `HINT` | Get a nudge on your next action (-10 points) |
+| `SCORE` | End the sim and receive your after-action review with score /100 |
+| `QUIT` | Exit the simulation |
+
 ---
 
 ## Data Sources
@@ -229,7 +261,7 @@ Run this any time you want to pull in the latest changes or new features.
 ### Medium term
 - [ ] Flashcard mode with spaced repetition
 - [ ] Log analysis practice — paste raw logs, Claude walks through the investigation
-- [ ] Incident response simulator — live attack scenario, you make the decisions
+- [x] ~~Incident response simulator — live attack scenario, you make the decisions~~ ✅ shipped v1.1.0
 - [ ] MITRE ATT&CK browser — explore all tactics and techniques interactively
 
 ### Longer term
