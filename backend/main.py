@@ -12,6 +12,7 @@ import anthropic
 from fastapi import FastAPI, Header, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from fetchers.cisa import get_recent_kev_entries, get_cisa_alerts, get_all_kev_stats
@@ -353,3 +354,9 @@ async def iris(req: IrisRequest, api_key: str = Depends(resolve_key)):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "1.2.0"}
+
+
+# Serve frontend — mounted last so /api/* routes take priority
+_frontend = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+if os.path.isdir(_frontend):
+    app.mount("/", StaticFiles(directory=_frontend, html=True), name="frontend")

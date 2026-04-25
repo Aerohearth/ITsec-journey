@@ -270,7 +270,7 @@
 
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
-const API = 'http://localhost:8000';
+const API = window.location.protocol === 'file:' ? 'http://localhost:8000' : window.location.origin;
 
 const VIEWS = [
   { id: 'briefing',   label: 'Daily Briefing',   ic: '📡' },
