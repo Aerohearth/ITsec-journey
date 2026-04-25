@@ -2,6 +2,8 @@ import sys
 import os
 import json
 import asyncio
+import time
+from collections import defaultdict
 from datetime import date
 from typing import Optional, AsyncGenerator
 
@@ -9,7 +11,7 @@ from typing import Optional, AsyncGenerator
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import anthropic
-from fastapi import FastAPI, Header, Depends, HTTPException, Query
+from fastapi import FastAPI, Header, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -30,6 +32,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Rate limiting (active only when server manages the API key) ───────────────
+
+_rate_store: dict[str, list[float]] = defaultdict(list)
+RATE_LIMIT  = 20    # requests
+RATE_WINDOW = 3600  # seconds (1 hour)
+
+async def rate_limit(request: Request) -> None:
+    if not ANTHROPIC_API_KEY:
+        return  # user supplies own key — no need to limit
+    ip  = request.client.host
+    now = time.time()
+    _rate_store[ip] = [t for t in _rate_store[ip] if now - t < RATE_WINDOW]
+    if len(_rate_store[ip]) >= RATE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit reached: {RATE_LIMIT} AI requests per hour. Try again later.",
+        )
+    _rate_store[ip].append(now)
 
 
 # ── API key resolution ────────────────────────────────────────────────────────
@@ -251,7 +273,7 @@ class IrisRequest(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.post("/api/briefing")
-async def briefing(api_key: str = Depends(resolve_key)):
+async def briefing(api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
     kev_entries, cisa_alerts = await asyncio.gather(
         asyncio.to_thread(get_recent_kev_entries, 14, 5),
         asyncio.to_thread(get_cisa_alerts, 3),
@@ -267,7 +289,7 @@ async def cves(days: int = Query(7), limit: int = Query(10)):
 
 
 @app.post("/api/cves/analyze")
-async def cve_analyze(req: CveAnalyzeRequest, api_key: str = Depends(resolve_key)):
+async def cve_analyze(req: CveAnalyzeRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
     if req.cve_data:
         cve_data = req.cve_data
     elif req.cve_id:
@@ -292,7 +314,7 @@ async def exploits(days: int = Query(30), limit: int = Query(15)):
 
 
 @app.post("/api/exploits/analyze")
-async def exploits_analyze(req: KevAnalyzeRequest, api_key: str = Depends(resolve_key)):
+async def exploits_analyze(req: KevAnalyzeRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
     prompt = _kev_analyze_prompt(req.entry)
     return StreamingResponse(
         _stream(prompt, api_key, use_thinking=True),
@@ -301,7 +323,7 @@ async def exploits_analyze(req: KevAnalyzeRequest, api_key: str = Depends(resolv
 
 
 @app.post("/api/threathunt")
-async def threathunt(req: ThreatHuntRequest, api_key: str = Depends(resolve_key)):
+async def threathunt(req: ThreatHuntRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
     prompt = _threathunt_prompt(req.topic)
     return StreamingResponse(
         _stream(prompt, api_key, use_thinking=True),
@@ -310,13 +332,13 @@ async def threathunt(req: ThreatHuntRequest, api_key: str = Depends(resolve_key)
 
 
 @app.post("/api/explain")
-async def explain(req: ExplainRequest, api_key: str = Depends(resolve_key)):
+async def explain(req: ExplainRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
     prompt = _explain_prompt(req.concept)
     return StreamingResponse(_stream(prompt, api_key), media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/quiz")
-async def quiz(req: QuizRequest, api_key: str = Depends(resolve_key)):
+async def quiz(req: QuizRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
     num = max(1, min(req.num_questions, 15))
     prompt = _quiz_prompt(req.topic, num)
     return StreamingResponse(_stream(prompt, api_key), media_type="text/plain; charset=utf-8")
@@ -342,13 +364,18 @@ async def iris_scenarios():
 
 
 @app.post("/api/iris")
-async def iris(req: IrisRequest, api_key: str = Depends(resolve_key)):
+async def iris(req: IrisRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
     if not req.messages:
         raise HTTPException(status_code=400, detail="messages list is required.")
     return StreamingResponse(
         _stream_iris(req.messages, api_key),
         media_type="text/plain; charset=utf-8",
     )
+
+
+@app.get("/api/config")
+async def config():
+    return {"server_key_configured": bool(ANTHROPIC_API_KEY)}
 
 
 @app.get("/api/health")

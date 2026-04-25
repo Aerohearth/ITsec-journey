@@ -893,8 +893,15 @@ document.addEventListener('click', e => {
     sb.classList.remove('open');
 });
 
-// Boot
-if (getKey()) showApp();
+// Boot — check if server manages its own key before showing key overlay
+(async () => {
+  try {
+    const res = await fetch(`${API}/api/config`);
+    const cfg = await res.json();
+    if (cfg.server_key_configured) { showApp(); return; }
+  } catch { /* backend unreachable — fall through */ }
+  if (getKey()) showApp();
+})();
 
 // ── Service Worker ────────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
