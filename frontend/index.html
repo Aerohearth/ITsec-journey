@@ -140,6 +140,16 @@
     .output.streaming::after { content: '▋'; animation: blink 1s step-end infinite; color: var(--cyan); }
     @keyframes blink { 50% { opacity: 0; } }
 
+    /* ── Sub-tabs ── */
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+    .tab {
+      padding: 0.55rem 1.1rem; font-size: 0.85rem; cursor: pointer;
+      color: var(--dim); border-bottom: 2px solid transparent;
+      margin-bottom: -1px; transition: all 0.12s; user-select: none;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+
     /* ── Suggestion chips ── */
     .chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
     .chip { font-size: 0.75rem; }
@@ -274,13 +284,11 @@ const API = window.location.protocol === 'file:' ? 'http://localhost:8000' : win
 
 const VIEWS = [
   { id: 'briefing',   label: 'Daily Briefing',   ic: '📡' },
-  { id: 'cves',       label: 'CVE Explorer',      ic: '🔍' },
-  { id: 'exploits',   label: 'Active Exploits',   ic: '⚠️'  },
-  { id: 'threathunt', label: 'Threat Hunt',        ic: '🎯' },
-  { id: 'explain',    label: 'Concept Explainer', ic: '📖' },
-  { id: 'quiz',       label: 'Knowledge Quiz',    ic: '❓' },
-  { id: 'kevstats',   label: 'KEV Catalog',       ic: '📊' },
-  { id: 'iris',       label: 'IRIS Simulator',    ic: '🔴' },
+  { id: 'vuln',       label: 'Vuln Intelligence',  ic: '🔍' },
+  { id: 'threathunt', label: 'Threat Hunt',         ic: '🎯' },
+  { id: 'explain',    label: 'Concept Explainer',  ic: '📖' },
+  { id: 'quiz',       label: 'Knowledge Quiz',     ic: '❓' },
+  { id: 'iris',       label: 'IRIS Simulator',     ic: '🔴' },
 ];
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -288,6 +296,7 @@ const S = {
   cves:      null,
   exploits:  null,
   kev:       { data: null, page: 0 },
+  vuln:      { tab: 'disclosures' },
   iris:      { active: false, name: '', messages: [] },
   scenarios: null,
 };
@@ -394,11 +403,64 @@ function renderBriefing(el) {
   });
 }
 
-// ── View: CVE Explorer ────────────────────────────────────────────────────────
-function renderCVEs(el) {
+// ── View: Vulnerability Intelligence (merged CVE Explorer + Active Exploits + KEV Catalog) ──
+const VULN_TABS = [
+  { id: 'disclosures', label: 'Recent Disclosures' },
+  { id: 'exploits',    label: 'Active Exploits'    },
+  { id: 'catalog',     label: 'KEV Catalog'        },
+];
+
+function renderVuln(el) {
+  const active = S.vuln.tab;
   el.innerHTML = `
-    <h1 class="vt">CVE Explorer</h1>
-    <p class="vd">Recent critical vulnerabilities from NIST NVD. Click Analyze for an AI deep-dive.</p>
+    <h1 class="vt">Vulnerability Intelligence</h1>
+    <p class="vd">Three views on the same threat landscape — freshly disclosed, actively exploited, and the full catalog.</p>
+    <div class="tabs">
+      ${VULN_TABS.map(t => `<div class="tab${t.id === active ? ' active' : ''}" data-tab="${t.id}">${t.label}</div>`).join('')}
+    </div>
+    <div id="vuln-body"></div>
+    ${outEl()}
+  `;
+  el.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    S.vuln.tab = t.dataset.tab;
+    el.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+    renderVulnTab(el);
+  }));
+  el.addEventListener('click', e => {
+    if (e.target.classList.contains('ba-cve'))
+      doAnalyzeCVE(el, { cve_data: S.cves[+e.target.dataset.i] });
+    if (e.target.classList.contains('ba-exp')) {
+      const o = el.querySelector('#out');
+      o.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      streamTo(`${API}/api/exploits/analyze`,
+        { method: 'POST', headers: hdrs(), body: JSON.stringify({ entry: S.exploits[+e.target.dataset.i] }) }, o);
+    }
+    if (e.target.classList.contains('ba-kev')) {
+      const entry = S.kev.data.vulnerabilities[+e.target.dataset.i];
+      const o = el.querySelector('#out');
+      o.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      streamTo(`${API}/api/exploits/analyze`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ entry }) }, o);
+    }
+    if (e.target.id === 'kev-prev' && S.kev.page > 0) { S.kev.page--; renderVulnTab(el); }
+    if (e.target.id === 'kev-next') {
+      const tot = Math.ceil((S.kev.data?.vulnerabilities?.length || 0) / PAGE_SZ);
+      if (S.kev.page < tot - 1) { S.kev.page++; renderVulnTab(el); }
+    }
+  });
+  renderVulnTab(el);
+}
+
+function renderVulnTab(el) {
+  const tab = S.vuln.tab;
+  if (tab === 'disclosures') renderDisclosures(el);
+  else if (tab === 'exploits') renderActiveExploits(el);
+  else renderKEVCatalog(el);
+}
+
+// ── Tab: Recent Disclosures (NVD) ─────────────────────────────────────────────
+function renderDisclosures(el) {
+  const body = el.querySelector('#vuln-body');
+  body.innerHTML = `
     <div class="ctrls">
       <div class="fg">
         <label>CVE ID (direct lookup)</label>
@@ -408,26 +470,21 @@ function renderCVEs(el) {
       <button class="btn btn-o" id="btn-cve-reload">↺ Reload</button>
     </div>
     <div id="cve-tbl"><div class="tdim" style="font-size:.84rem">Fetching from NIST NVD…</div></div>
-    ${outEl()}
   `;
   loadCVEs(el);
-  el.querySelector('#btn-cve-reload').addEventListener('click', () => { S.cves = null; loadCVEs(el); });
-  el.querySelector('#btn-lookup').addEventListener('click', () => {
-    const id = el.querySelector('#cve-id').value.trim();
+  body.querySelector('#btn-cve-reload').addEventListener('click', () => { S.cves = null; loadCVEs(el); });
+  body.querySelector('#btn-lookup').addEventListener('click', () => {
+    const id = body.querySelector('#cve-id').value.trim();
     if (id) doAnalyzeCVE(el, { cve_id: id });
   });
-  el.querySelector('#cve-id').addEventListener('keydown', e => {
-    if (e.key === 'Enter') el.querySelector('#btn-lookup').click();
-  });
-  el.addEventListener('click', e => {
-    if (e.target.classList.contains('ba-cve')) {
-      doAnalyzeCVE(el, { cve_data: S.cves[+e.target.dataset.i] });
-    }
+  body.querySelector('#cve-id').addEventListener('keydown', e => {
+    if (e.key === 'Enter') body.querySelector('#btn-lookup').click();
   });
 }
 
 async function loadCVEs(el) {
   const area = el.querySelector('#cve-tbl');
+  if (!area) return;
   if (S.cves) { area.innerHTML = cveTable(S.cves); return; }
   try {
     const r = await fetch(`${API}/api/cves?days=7&limit=15`, { headers: hdrs(false) });
@@ -459,31 +516,22 @@ async function doAnalyzeCVE(el, body) {
   await streamTo(`${API}/api/cves/analyze`, { method: 'POST', headers: hdrs(), body: JSON.stringify(body) }, o);
 }
 
-// ── View: Active Exploits ─────────────────────────────────────────────────────
-function renderExploits(el) {
-  el.innerHTML = `
-    <h1 class="vt">Active Exploits</h1>
-    <p class="vd">CISA Known Exploited Vulnerabilities — currently being weaponised in the wild.</p>
+// ── Tab: Active Exploits (CISA KEV recent) ────────────────────────────────────
+function renderActiveExploits(el) {
+  const body = el.querySelector('#vuln-body');
+  body.innerHTML = `
     <div class="ctrls">
       <button class="btn btn-o" id="btn-exp-rl">↺ Reload</button>
     </div>
     <div id="exp-tbl"><div class="tdim" style="font-size:.84rem">Fetching from CISA KEV…</div></div>
-    ${outEl()}
   `;
   loadExploits(el);
-  el.querySelector('#btn-exp-rl').addEventListener('click', () => { S.exploits = null; loadExploits(el); });
-  el.addEventListener('click', e => {
-    if (e.target.classList.contains('ba-exp')) {
-      const o = el.querySelector('#out');
-      o.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      streamTo(`${API}/api/exploits/analyze`,
-        { method: 'POST', headers: hdrs(), body: JSON.stringify({ entry: S.exploits[+e.target.dataset.i] }) }, o);
-    }
-  });
+  body.querySelector('#btn-exp-rl').addEventListener('click', () => { S.exploits = null; loadExploits(el); });
 }
 
 async function loadExploits(el) {
   const area = el.querySelector('#exp-tbl');
+  if (!area) return;
   if (S.exploits) { area.innerHTML = expTable(S.exploits); return; }
   try {
     const r = await fetch(`${API}/api/exploits?days=30&limit=20`, { headers: hdrs(false) });
@@ -507,6 +555,83 @@ function expTable(entries) {
   return `<div class="tbl-wrap"><table class="tbl">
     <thead><tr><th>CVE ID</th><th>Vendor / Product</th><th>Date Added</th><th>Ransomware</th><th>Description</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
+}
+
+// ── Tab: KEV Catalog (full paginated catalog) ─────────────────────────────────
+function renderKEVCatalog(el) {
+  const body = el.querySelector('#vuln-body');
+  body.innerHTML = `
+    <div id="kev-stats"><div class="tdim" style="font-size:.84rem">Loading full catalog…</div></div>
+    <div id="kev-tbl"></div>
+    <div id="kev-pag" class="pag" style="display:none">
+      <button class="btn btn-o btn-sm" id="kev-prev">← Prev</button>
+      <span id="kev-pi"></span>
+      <button class="btn btn-o btn-sm" id="kev-next">Next →</button>
+    </div>
+  `;
+  loadKEV(el);
+}
+
+async function loadKEV(el) {
+  if (S.kev.data) { renderKEVFull(el); return; }
+  try {
+    const r = await fetch(`${API}/api/kevstats`, { headers: hdrs(false) });
+    S.kev.data = await r.json();
+    S.kev.page = 0;
+    renderKEVFull(el);
+  } catch {
+    const area = el.querySelector('#kev-stats');
+    if (area) area.innerHTML = '<span style="color:var(--red)">Could not reach backend.</span>';
+  }
+}
+
+function renderKEVFull(el) {
+  const d = el.querySelector('#kev-stats');
+  if (!d || !S.kev.data) return;
+  const kd = S.kev.data;
+  d.innerHTML = `
+    <div class="stat-row">
+      <div class="stat"><div class="stat-v">${(kd.total_entries || 0).toLocaleString()}</div><div class="stat-l">Total Entries</div></div>
+      <div class="stat"><div class="stat-v">${kd.catalog_version || '—'}</div><div class="stat-l">Catalog Version</div></div>
+      <div class="stat"><div class="stat-v">${(kd.date_released || '').slice(0, 10) || '—'}</div><div class="stat-l">Last Released</div></div>
+    </div>
+    <p style="font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem">Top Targeted Vendors</p>
+    <div class="vendor-chips">
+      ${(kd.top_vendors || []).map(([v, c]) => `<span class="vcip">${v} <em>${c}</em></span>`).join('')}
+    </div>
+  `;
+  renderKEVPage(el);
+}
+
+function renderKEVPage(el) {
+  const vulns = S.kev.data?.vulnerabilities || [];
+  const tot   = Math.ceil(vulns.length / PAGE_SZ);
+  const start = S.kev.page * PAGE_SZ;
+  const slice = vulns.slice(start, start + PAGE_SZ);
+  const tblEl = el.querySelector('#kev-tbl');
+  const pagEl = el.querySelector('#kev-pag');
+  if (!tblEl) return;
+
+  const rows = slice.map((e, i) => `<tr>
+    <td class="tdim" style="font-family:var(--mono);font-size:.74rem">${start + i + 1}</td>
+    <td class="mono">${e.cveID}</td>
+    <td>${e.vendorProject} / ${e.product}</td>
+    <td class="tdim">${e.dateAdded}</td>
+    <td>${rnBadge(e.knownRansomwareCampaignUse)}</td>
+    <td class="tdesc">${trunc(e.shortDescription)}</td>
+    <td><button class="btn btn-o btn-sm ba-kev" data-i="${start + i}">Analyze</button></td>
+  </tr>`).join('');
+
+  tblEl.innerHTML = `<div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>#</th><th>CVE ID</th><th>Vendor / Product</th><th>Date Added</th><th>Ransomware</th><th>Description</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+
+  if (pagEl) {
+    pagEl.style.display = 'flex';
+    el.querySelector('#kev-pi').textContent = `Page ${S.kev.page + 1} of ${tot}  (${vulns.length} entries)`;
+    el.querySelector('#kev-prev').disabled = S.kev.page === 0;
+    el.querySelector('#kev-next').disabled = S.kev.page >= tot - 1;
+  }
 }
 
 // ── View: Threat Hunt ─────────────────────────────────────────────────────────
@@ -590,91 +715,6 @@ function renderQuiz(el) {
     await streamTo(`${API}/api/quiz`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ topic, num_questions: num }) }, el.querySelector('#out'));
     b.disabled = false; b.textContent = 'Generate Quiz';
   });
-}
-
-// ── View: KEV Catalog ─────────────────────────────────────────────────────────
-function renderKEVStats(el) {
-  el.innerHTML = `
-    <h1 class="vt">KEV Catalog</h1>
-    <p class="vd">Full CISA Known Exploited Vulnerabilities catalog. Browse every entry, analyze any with AI.</p>
-    <div id="kev-stats"><div class="tdim" style="font-size:.84rem">Loading full catalog…</div></div>
-    <div id="kev-tbl"></div>
-    <div id="kev-pag" class="pag" style="display:none">
-      <button class="btn btn-o btn-sm" id="kev-prev">← Prev</button>
-      <span id="kev-pi"></span>
-      <button class="btn btn-o btn-sm" id="kev-next">Next →</button>
-    </div>
-    ${outEl()}
-  `;
-  loadKEV(el);
-  el.querySelector('#kev-prev').addEventListener('click', () => { if (S.kev.page > 0) { S.kev.page--; renderKEVPage(el); } });
-  el.querySelector('#kev-next').addEventListener('click', () => {
-    const tot = Math.ceil((S.kev.data?.vulnerabilities?.length || 0) / PAGE_SZ);
-    if (S.kev.page < tot - 1) { S.kev.page++; renderKEVPage(el); }
-  });
-  el.addEventListener('click', e => {
-    if (e.target.classList.contains('ba-kev')) {
-      const entry = S.kev.data.vulnerabilities[+e.target.dataset.i];
-      const o = el.querySelector('#out');
-      o.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      streamTo(`${API}/api/exploits/analyze`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ entry }) }, o);
-    }
-  });
-}
-
-async function loadKEV(el) {
-  if (S.kev.data) { renderKEVFull(el); return; }
-  try {
-    const r = await fetch(`${API}/api/kevstats`, { headers: hdrs(false) });
-    S.kev.data = await r.json();
-    S.kev.page = 0;
-    renderKEVFull(el);
-  } catch {
-    el.querySelector('#kev-stats').innerHTML = '<span style="color:var(--red)">Could not reach backend.</span>';
-  }
-}
-
-function renderKEVFull(el) {
-  const d = S.kev.data;
-  el.querySelector('#kev-stats').innerHTML = `
-    <div class="stat-row">
-      <div class="stat"><div class="stat-v">${(d.total_entries || 0).toLocaleString()}</div><div class="stat-l">Total Entries</div></div>
-      <div class="stat"><div class="stat-v">${d.catalog_version || '—'}</div><div class="stat-l">Catalog Version</div></div>
-      <div class="stat"><div class="stat-v">${(d.date_released || '').slice(0, 10) || '—'}</div><div class="stat-l">Last Released</div></div>
-    </div>
-    <p style="font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem">Top Targeted Vendors</p>
-    <div class="vendor-chips">
-      ${(d.top_vendors || []).map(([v, c]) => `<span class="vcip">${v} <em>${c}</em></span>`).join('')}
-    </div>
-  `;
-  renderKEVPage(el);
-}
-
-function renderKEVPage(el) {
-  const vulns = S.kev.data?.vulnerabilities || [];
-  const tot   = Math.ceil(vulns.length / PAGE_SZ);
-  const start = S.kev.page * PAGE_SZ;
-  const slice = vulns.slice(start, start + PAGE_SZ);
-
-  const rows = slice.map((e, i) => `<tr>
-    <td class="tdim" style="font-family:var(--mono);font-size:.74rem">${start + i + 1}</td>
-    <td class="mono">${e.cveID}</td>
-    <td>${e.vendorProject} / ${e.product}</td>
-    <td class="tdim">${e.dateAdded}</td>
-    <td>${rnBadge(e.knownRansomwareCampaignUse)}</td>
-    <td class="tdesc">${trunc(e.shortDescription)}</td>
-    <td><button class="btn btn-o btn-sm ba-kev" data-i="${start + i}">Analyze</button></td>
-  </tr>`).join('');
-
-  el.querySelector('#kev-tbl').innerHTML = `<div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>#</th><th>CVE ID</th><th>Vendor / Product</th><th>Date Added</th><th>Ransomware</th><th>Description</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`;
-
-  const pag = el.querySelector('#kev-pag');
-  pag.style.display = 'flex';
-  el.querySelector('#kev-pi').textContent = `Page ${S.kev.page + 1} of ${tot}  (${vulns.length} entries)`;
-  el.querySelector('#kev-prev').disabled = S.kev.page === 0;
-  el.querySelector('#kev-next').disabled = S.kev.page >= tot - 1;
 }
 
 // ── View: IRIS ────────────────────────────────────────────────────────────────
@@ -837,9 +877,12 @@ async function irisAction(el, action) {
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 const RENDERERS = {
-  briefing: renderBriefing, cves: renderCVEs, exploits: renderExploits,
-  threathunt: renderThreatHunt, explain: renderExplain, quiz: renderQuiz,
-  kevstats: renderKEVStats, iris: renderIRIS,
+  briefing:   renderBriefing,
+  vuln:       renderVuln,
+  threathunt: renderThreatHunt,
+  explain:    renderExplain,
+  quiz:       renderQuiz,
+  iris:       renderIRIS,
 };
 
 function navigate(id) {
