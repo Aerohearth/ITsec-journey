@@ -6,6 +6,29 @@ Format: `[version] — date` followed by what changed and why.
 
 ---
 
+## [1.2.0] — 2026-04-25
+
+### Added
+- **Progress Tracker** — session history and quiz scores saved locally to `data/progress.json`
+  - `record_quiz(topic, score, total)` — saves score and percentage per topic
+  - `record_iris(scenario, score)` — saves IRIS after-action score
+  - `_calc_streak()` — calculates consecutive study days
+- **Startup Dashboard** — shown at launch whenever history exists
+  - Displays: total sessions, quizzes taken, average score, personal best, day streak, IRIS sim count
+  - Recent quizzes table with colour-coded pass/fail scores
+  - IRIS average score if simulations have been completed
+- **Quiz score prompt** — after each quiz, user enters how many they got right; saved immediately
+- **IRIS score prompt** — after simulation ends (SCORE or QUIT), user enters the after-action score
+- `progress/` module (`tracker.py`) with `ProgressTracker` class
+- `print_dashboard()` added to `ui/display.py`
+
+### Repository
+- Flattened project structure — app now lives at repo root (was `soc-trainer/`)
+- Removed A+ certification and early labs content
+- Rewrote root README for public launch
+
+---
+
 ## [1.1.0] — 2026-04-18
 
 ### Added
@@ -47,20 +70,17 @@ Format: `[version] — date` followed by what changed and why.
 
 ## Upcoming
 
-### [1.2.0] — planned
-- Progress tracker: save quiz scores and session history locally
+### [1.3.0]
 - Bookmarks: save CVEs and KEV entries to a local file for later review
-- Additional data source: AlienVault OTX threat intel feed
-
-### [1.3.0] — planned
+- AlienVault OTX integration as an additional threat feed
 - Flashcard mode with spaced repetition
-- Log analysis practice: paste raw logs, Claude walks through the investigation
-- MITRE ATT&CK browser
 
-### [1.4.0] — planned
-- Web UI (Flask/FastAPI)
-- Personal knowledge base: save and search all past AI analyses
+### [1.4.0]
+- Log analysis practice: paste raw logs, Claude walks through the investigation
+- MITRE ATT&CK browser integrated with live threat data
+- YAML-defined custom IRIS scenarios
 
 ### [future]
-- Wazuh/Sysmon home lab integration
+- Web UI
 - Certification study mode (Security+, CySA+, SANS)
+- Wazuh/Sysmon home lab integration

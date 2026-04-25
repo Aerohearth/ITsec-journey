@@ -343,3 +343,49 @@ def prompt_analyst_action() -> str:
 
 def print_ir_divider() -> None:
     console.print(Rule(style="dim red"))
+
+
+# ── Progress dashboard ────────────────────────────────────────────────────────
+
+def print_dashboard(stats: dict) -> None:
+    """Display session history and quiz stats on startup."""
+    if stats["total_sessions"] == 0:
+        return
+
+    console.print()
+    console.print(Rule("[bold cyan]Progress Dashboard[/bold cyan]", style="cyan"))
+    console.print()
+
+    streak = stats["streak_days"]
+    streak_color = "yellow" if streak >= 3 else "white"
+    streak_str = f"[{streak_color}]{streak} day{'s' if streak != 1 else ''}[/{streak_color}]"
+
+    avg = stats["avg_quiz_score"]
+    avg_color = "green" if avg >= 80 else "yellow" if avg >= 60 else "red"
+
+    console.print(
+        f"  Sessions: [bold bright_cyan]{stats['total_sessions']}[/bold bright_cyan]"
+        f"  │  Quizzes: [bold magenta]{stats['total_quizzes']}[/bold magenta]"
+        f"  │  Avg Score: [{avg_color}]{avg}%[/{avg_color}]"
+        f"  │  Best: [bold yellow]{stats['best_quiz_score']}%[/bold yellow]"
+        f"  │  Streak: {streak_str}"
+        f"  │  IRIS Sims: [bold red]{stats['total_iris']}[/bold red]"
+    )
+
+    if stats["recent_quizzes"]:
+        console.print()
+        table = Table(box=box.SIMPLE, show_header=True, header_style="bold dim", padding=(0, 2))
+        table.add_column("Recent Quizzes", style="white")
+        table.add_column("Score", justify="right")
+        for q in stats["recent_quizzes"]:
+            pct = q["percent"]
+            c = "green" if pct >= 80 else "yellow" if pct >= 60 else "red"
+            table.add_row(q["topic"], f"[{c}]{q['score']}/{q['total']}  ({pct}%)[/{c}]")
+        console.print(table)
+
+    if stats["total_iris"] > 0:
+        console.print(
+            f"  [dim]IRIS average score:[/dim] [bold red]{stats['avg_iris_score']}[/bold red]"
+        )
+
+    console.print()

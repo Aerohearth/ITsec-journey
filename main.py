@@ -19,6 +19,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.console import Console
 
 from config import ANTHROPIC_API_KEY
+from progress import ProgressTracker
 from fetchers.cisa import get_recent_kev_entries, get_cisa_alerts, get_all_kev_stats
 from fetchers.nvd import get_recent_critical_cves, get_cve_by_id
 from processors.ir_simulator import SCENARIOS, get_iris_response, build_custom_prompt
@@ -50,8 +51,11 @@ from ui.display import (
     stream_iris_response,
     prompt_analyst_action,
     print_ir_divider,
+    print_dashboard,
 )
 
+
+tracker = ProgressTracker()
 
 MENU_ITEMS = [
     ("1", "Daily Threat Briefing          — AI-generated morning SITREP from live threat feeds"),
@@ -273,6 +277,13 @@ def handle_quiz() -> None:
         border_style="magenta",
     )
 
+    score_str = prompt_user(f"How many did you get right? (0-{num}, or press Enter to skip):")
+    if score_str.isdigit():
+        score = max(0, min(int(score_str), num))
+        tracker.record_quiz(topic, score, num)
+        pct = round(score / num * 100)
+        print_success(f"Saved: {score}/{num} ({pct}%) on '{topic}'")
+
 
 def handle_ir_sim() -> None:
     print_section("Incident Response Simulator — IRIS")
@@ -329,6 +340,7 @@ def handle_ir_sim() -> None:
         )):
             print_ir_divider()
             print_success("Simulation ended. Run IRIS again to start a new scenario.")
+            _prompt_iris_score(scenario["name"])
             break
 
         # Get analyst action
@@ -341,10 +353,19 @@ def handle_ir_sim() -> None:
         # Allow local quit without sending to Claude
         if action.upper() == "QUIT":
             console.print("\n[dim]Exiting simulation. Good work, analyst.[/dim]\n")
+            _prompt_iris_score(scenario["name"])
             break
 
         # Append analyst action to history and loop
         messages.append({"role": "user", "content": action})
+
+
+def _prompt_iris_score(scenario_name: str) -> None:
+    score_str = prompt_user("Enter your IRIS score from the after-action review (0-100, or press Enter to skip):")
+    if score_str.isdigit():
+        score = max(0, min(int(score_str), 100))
+        tracker.record_iris(scenario_name, score)
+        print_success(f"Saved IRIS score: {score}/100 for '{scenario_name}'")
 
 
 def handle_kev_stats() -> None:
@@ -365,6 +386,8 @@ def main() -> None:
 
     if not check_api_key():
         sys.exit(1)
+
+    print_dashboard(tracker.get_stats())
 
     handlers = {
         "1": handle_daily_briefing,
