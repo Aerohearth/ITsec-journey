@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SocForge</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#080c10">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #080c10;
+      --surface:  #0d1117;
+      --surface2: #111820;
+      --border:   #1e2d3d;
+      --cyan:     #00d4ff;
+      --cyan-dim: #0099bb;
+      --green:    #39d353;
+      --text:     #cdd9e5;
+      --dim:      #768390;
+      --red:      #f85149;
+      --yellow:   #e3b341;
+      --mono:     'Courier New', Courier, monospace;
+      --sans:     -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --sw:       230px;
+    }
+
+    html, body { height: 100%; }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 0.9rem; line-height: 1.6; overflow: hidden; }
+
+    /* ── API Key Overlay ── */
+    #overlay {
+      position: fixed; inset: 0; background: var(--bg);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+    }
+    #overlay.gone { display: none; }
+
+    .ov-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 2.5rem; width: 100%; max-width: 420px; text-align: center;
+    }
+    .ov-logo { font-family: var(--mono); font-size: 1.3rem; color: var(--cyan); margin-bottom: 0.35rem; }
+    .ov-logo span { color: var(--dim); }
+    .ov-card h2 { font-size: 1rem; color: var(--text); margin-bottom: 0.4rem; }
+    .ov-card p  { color: var(--dim); font-size: 0.82rem; margin-bottom: 1.75rem; }
+    .ov-card a  { color: var(--cyan); }
+
+    /* ── App Shell ── */
+    #app { display: none; height: 100vh; }
+    #app.on { display: grid; grid-template-columns: var(--sw) 1fr; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; height: 100vh; overflow-y: auto;
+      position: relative; z-index: 10; flex-shrink: 0;
+    }
+    .sf-logo {
+      font-family: var(--mono); font-size: 1rem; color: var(--cyan);
+      padding: 1.2rem 1.25rem 0.9rem; border-bottom: 1px solid var(--border);
+      letter-spacing: 0.04em; flex-shrink: 0;
+    }
+    .sf-logo span { color: var(--dim); }
+
+    .nav-list { list-style: none; padding: 0.5rem 0; flex: 1; }
+    .nav-item {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.6rem 1.25rem; cursor: pointer; color: var(--dim);
+      font-size: 0.875rem; transition: all 0.12s; user-select: none;
+      border-left: 2px solid transparent;
+    }
+    .nav-item:hover { color: var(--text); background: var(--surface2); }
+    .nav-item.active { color: var(--cyan); border-left-color: var(--cyan); background: rgba(0,212,255,0.05); }
+    .nav-item .ic { font-size: 0.82rem; width: 1.1rem; text-align: center; }
+
+    .sb-footer {
+      padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .sb-url { font-family: var(--mono); font-size: 0.7rem; color: var(--dim); margin-bottom: 0.5rem; }
+
+    /* ── Hamburger ── */
+    #hbg {
+      display: none; position: fixed; top: 0.7rem; left: 0.7rem; z-index: 50;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 0.35rem 0.6rem; border-radius: 6px;
+      cursor: pointer; font-size: 1.1rem; line-height: 1;
+    }
+
+    /* ── Content ── */
+    #content { height: 100vh; overflow-y: auto; padding: 2rem 2.5rem; background: var(--bg); }
+
+    /* ── Common ── */
+    h1.vt { font-size: 1.25rem; font-weight: 700; color: #fff; margin-bottom: 0.2rem; }
+    p.vd  { color: var(--dim); font-size: 0.83rem; margin-bottom: 1.4rem; }
+
+    .ctrls { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 1.1rem; }
+    .fg { display: flex; flex-direction: column; gap: 0.3rem; }
+    .fg label { font-size: 0.75rem; color: var(--dim); }
+
+    input[type=text], input[type=password], input[type=number], textarea, select {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-family: var(--sans);
+      font-size: 0.875rem; padding: 0.55rem 0.9rem; outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type=text]:focus, input[type=password]:focus,
+    input[type=number]:focus, textarea:focus { border-color: var(--cyan); }
+    input::placeholder, textarea::placeholder { color: var(--dim); }
+    input[type=text] { width: 260px; }
+    input[type=password] { width: 100%; }
+    input[type=number] { width: 72px; }
+    textarea { width: 100%; resize: vertical; min-height: 72px; font-family: var(--sans); }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.55rem 1.1rem; border-radius: 6px; font-size: 0.875rem;
+      font-weight: 500; cursor: pointer; border: none; transition: all 0.15s;
+      white-space: nowrap; font-family: var(--sans);
+    }
+    .btn-p  { background: var(--cyan); color: #000; }
+    .btn-p:hover { background: var(--cyan-dim); }
+    .btn-p:disabled { background: #1e3040; color: var(--dim); cursor: not-allowed; }
+    .btn-o  { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-o:hover { border-color: var(--cyan); color: var(--cyan); }
+    .btn-o:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-d  { background: transparent; color: var(--red); border: 1px solid var(--red); }
+    .btn-d:hover { background: rgba(248,81,73,0.1); }
+    .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.78rem; }
+
+    /* ── Output area ── */
+    .output {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1.25rem 1.5rem;
+      font-family: var(--mono); font-size: 0.79rem; line-height: 1.8;
+      white-space: pre-wrap; word-break: break-word;
+      min-height: 100px; max-height: 64vh; overflow-y: auto; color: var(--text);
+    }
+    .output.empty { color: var(--dim); }
+    .output.streaming::after { content: '▋'; animation: blink 1s step-end infinite; color: var(--cyan); }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── Suggestion chips ── */
+    .chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .chip { font-size: 0.75rem; }
+
+    /* ── Tables ── */
+    .tbl-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1.1rem; }
+    .tbl { width: 100%; border-collapse: collapse; font-size: 0.81rem; }
+    .tbl th {
+      background: var(--surface2); color: var(--dim); font-weight: 600;
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 0.55rem 0.9rem; text-align: left; border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .tbl td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl tr:hover td { background: var(--surface2); }
+    .mono { font-family: var(--mono); color: var(--cyan); font-size: 0.78rem; white-space: nowrap; }
+    .tdim { color: var(--dim); }
+    .tdesc { color: var(--dim); max-width: 300px; }
+
+    .sc  { color: var(--red); font-weight: 600; }
+    .sh  { color: var(--yellow); font-weight: 600; }
+    .sm  { color: var(--cyan); }
+    .sl  { color: var(--green); }
+    .su  { color: var(--dim); }
+    .rY  { color: var(--red); font-weight: 600; }
+    .rN  { color: var(--green); }
+
+    /* ── Pagination ── */
+    .pag { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+    .pag span { font-family: var(--mono); font-size: 0.8rem; color: var(--dim); }
+
+    /* ── KEV stats ── */
+    .stat-row { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.9rem 1.25rem; min-width: 140px; }
+    .stat-v { font-family: var(--mono); font-size: 1.4rem; color: var(--cyan); font-weight: 700; }
+    .stat-l { font-size: 0.75rem; color: var(--dim); margin-top: 0.15rem; }
+    .vendor-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.5rem; }
+    .vcip { font-family: var(--mono); font-size: 0.72rem; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem 0.55rem; color: var(--cyan); }
+    .vcip em { color: var(--dim); font-style: normal; }
+
+    /* ── IRIS ── */
+    .sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 0.9rem; margin-bottom: 1.5rem; }
+    .sc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; }
+    .diff { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
+    .dE { color: var(--green); }
+    .dM { color: var(--yellow); }
+    .dH { color: var(--red); }
+    .dV { color: var(--cyan); }
+    .sc-card h3 { font-size: 0.92rem; color: #fff; margin-bottom: 0.35rem; }
+    .sc-card p  { font-size: 0.8rem; color: var(--dim); margin-bottom: 0.9rem; }
+
+    .chat-shell { display: flex; flex-direction: column; height: calc(100vh - 140px); }
+    .chat-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.7rem; flex-shrink: 0; }
+    .chat-hdr .cn { font-family: var(--mono); font-size: 0.8rem; color: var(--cyan); }
+    .chat-hdr .hdr-btns { display: flex; gap: 0.5rem; }
+
+    .chat { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.9rem; padding: 0.25rem 0; }
+    .msg { max-width: 92%; }
+    .msg-i { align-self: flex-start; }
+    .msg-a { align-self: flex-end; }
+    .msg-lbl { font-family: var(--mono); font-size: 0.65rem; color: var(--dim); margin-bottom: 0.2rem; letter-spacing: 0.08em; }
+    .msg-a .msg-lbl { text-align: right; color: var(--cyan); }
+    .msg-body {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.7rem 1rem;
+      font-family: var(--mono); font-size: 0.77rem; line-height: 1.75;
+      white-space: pre-wrap; word-break: break-word; color: var(--text);
+    }
+    .msg-a .msg-body { background: rgba(0,212,255,0.06); border-color: rgba(0,212,255,0.2); color: var(--cyan); }
+    .msg-body.streaming::after { content: '▋'; animation: blink 1s step-end infinite; color: var(--cyan); }
+
+    .chat-irow { display: flex; gap: 0.6rem; margin-top: 0.7rem; flex-shrink: 0; }
+    .chat-irow input { flex: 1; min-width: 0; }
+
+    /* ── Mobile ── */
+    @media (max-width: 768px) {
+      body { overflow: auto; }
+      #hbg { display: block; }
+      #app.on { grid-template-columns: 1fr; }
+      #sidebar {
+        position: fixed; left: 0; top: 0; bottom: 0; width: var(--sw);
+        transform: translateX(-100%); transition: transform 0.22s; z-index: 40;
+      }
+      #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.6); }
+      #content { height: auto; min-height: 100vh; padding: 1.25rem 1rem 2rem; padding-top: 3.5rem; }
+      input[type=text] { width: 100%; }
+      .ctrls { flex-direction: column; align-items: stretch; }
+      .ctrls .btn { justify-content: center; }
+      .chat-shell { height: auto; min-height: calc(100vh - 160px); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- API Key Overlay -->
+<div id="overlay">
+  <div class="ov-card">
+    <div class="ov-logo">Soc<span>Forge</span></div>
+    <h2>Enter your Anthropic API Key</h2>
+    <p>Stored in your browser only. Sent to the local backend running on your machine — never leaves your device.</p>
+    <div class="fg" style="text-align:left;margin-bottom:0.75rem">
+      <label>Anthropic API Key</label>
+      <input type="password" id="key-in" placeholder="sk-ant-api03-…">
+    </div>
+    <button class="btn btn-p" style="width:100%" id="key-save">Save &amp; Launch</button>
+    <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--dim)">
+      Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>
+    </p>
+  </div>
+</div>
+
+<!-- Mobile hamburger -->
+<button id="hbg">☰</button>
+
+<!-- App shell -->
+<div id="app">
+  <nav id="sidebar">
+    <div class="sf-logo">Soc<span>Forge</span></div>
+    <ul class="nav-list" id="nav-list"></ul>
+    <div class="sb-footer">
+      <div class="sb-url">⬡ localhost:8000</div>
+      <button class="btn btn-o btn-sm" id="chg-key" style="width:100%">⚙ Change API Key</button>
+    </div>
+  </nav>
+  <main id="content"></main>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const API = 'http://localhost:8000';
+
+const VIEWS = [
+  { id: 'briefing',   label: 'Daily Briefing',   ic: '📡' },
+  { id: 'cves',       label: 'CVE Explorer',      ic: '🔍' },
+  { id: 'exploits',   label: 'Active Exploits',   ic: '⚠️'  },
+  { id: 'threathunt', label: 'Threat Hunt',        ic: '🎯' },
+  { id: 'explain',    label: 'Concept Explainer', ic: '📖' },
+  { id: 'quiz',       label: 'Knowledge Quiz',    ic: '❓' },
+  { id: 'kevstats',   label: 'KEV Catalog',       ic: '📊' },
+  { id: 'iris',       label: 'IRIS Simulator',    ic: '🔴' },
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const S = {
+  cves:      null,
+  exploits:  null,
+  kev:       { data: null, page: 0 },
+  iris:      { active: false, name: '', messages: [] },
+  scenarios: null,
+};
+const PAGE_SZ = 20;
+
+// ── Key utils ─────────────────────────────────────────────────────────────────
+const getKey = () => localStorage.getItem('sf_key') || '';
+const setKey = k  => localStorage.setItem('sf_key', k.trim());
+
+function hdrs(json = true) {
+  const h = { 'X-Api-Key': getKey() };
+  if (json) h['Content-Type'] = 'application/json';
+  return h;
+}
+
+// ── Streaming ─────────────────────────────────────────────────────────────────
+async function streamTo(url, opts, el) {
+  el.textContent = '';
+  el.classList.remove('empty');
+  el.classList.add('streaming');
+  try {
+    const res = await fetch(url, opts);
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ detail: res.statusText }));
+      el.textContent = `Error ${res.status}: ${e.detail || res.statusText}`;
+      return;
+    }
+    const rdr = res.body.getReader(), dec = new TextDecoder();
+    while (true) {
+      const { done, value } = await rdr.read();
+      if (done) break;
+      el.textContent += dec.decode(value, { stream: true });
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
+    }
+  } catch (e) {
+    el.textContent = e.message.includes('fetch')
+      ? 'Cannot reach backend.\n\nMake sure it is running:\n  uvicorn backend.main:app --reload'
+      : `Error: ${e.message}`;
+  } finally {
+    el.classList.remove('streaming');
+  }
+}
+
+// Streams and returns full text (IRIS chat)
+async function streamCollect(url, opts, el) {
+  el.textContent = '';
+  el.classList.add('streaming');
+  let full = '';
+  try {
+    const res = await fetch(url, opts);
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ detail: res.statusText }));
+      el.textContent = `Error ${res.status}: ${e.detail}`;
+      return '';
+    }
+    const rdr = res.body.getReader(), dec = new TextDecoder();
+    while (true) {
+      const { done, value } = await rdr.read();
+      if (done) break;
+      full += dec.decode(value, { stream: true });
+      el.textContent = full;
+      const chat = el.closest('.chat');
+      if (chat) chat.scrollTop = chat.scrollHeight;
+    }
+  } catch (e) {
+    el.textContent = `Error: ${e.message}`;
+  } finally {
+    el.classList.remove('streaming');
+  }
+  return full;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function sevBadge(s) {
+  const m = { CRITICAL: 'sc', HIGH: 'sh', MEDIUM: 'sm', LOW: 'sl' };
+  return `<span class="${m[s] || 'su'}">${s || 'UNKNOWN'}</span>`;
+}
+function rnBadge(v) {
+  return v?.toLowerCase() === 'known' ? '<span class="rY">YES</span>' : '<span class="rN">No</span>';
+}
+function diffCls(d) {
+  return { EASY: 'dE', MEDIUM: 'dM', HARD: 'dH', variable: 'dV' }[d] || 'dV';
+}
+function trunc(s, n = 80) { return (s || '').length > n ? s.slice(0, n) + '…' : (s || ''); }
+function outEl(hint = 'Output will appear here…') {
+  return `<div class="output empty" id="out">${hint}</div>`;
+}
+
+// ── View: Daily Briefing ──────────────────────────────────────────────────────
+function renderBriefing(el) {
+  el.innerHTML = `
+    <h1 class="vt">Daily Threat Briefing</h1>
+    <p class="vd">Live data from CISA KEV + government alerts, synthesised into your morning SITREP.</p>
+    <div class="ctrls">
+      <button class="btn btn-p" id="btn-brief">Generate Briefing</button>
+    </div>
+    ${outEl('Click Generate Briefing to fetch live threat data and produce your SITREP.')}
+  `;
+  el.querySelector('#btn-brief').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    b.disabled = true; b.textContent = 'Fetching live data…';
+    await streamTo(`${API}/api/briefing`, { method: 'POST', headers: hdrs() }, el.querySelector('#out'));
+    b.disabled = false; b.textContent = 'Generate Briefing';
+  });
+}
+
+// ── View: CVE Explorer ────────────────────────────────────────────────────────
+function renderCVEs(el) {
+  el.innerHTML = `
+    <h1 class="vt">CVE Explorer</h1>
+    <p class="vd">Recent critical vulnerabilities from NIST NVD. Click Analyze for an AI deep-dive.</p>
+    <div class="ctrls">
+      <div class="fg">
+        <label>CVE ID (direct lookup)</label>
+        <input type="text" id="cve-id" placeholder="CVE-2024-12345">
+      </div>
+      <button class="btn btn-o" id="btn-lookup">Look Up</button>
+      <button class="btn btn-o" id="btn-cve-reload">↺ Reload</button>
+    </div>
+    <div id="cve-tbl"><div class="tdim" style="font-size:.84rem">Fetching from NIST NVD…</div></div>
+    ${outEl()}
+  `;
+  loadCVEs(el);
+  el.querySelector('#btn-cve-reload').addEventListener('click', () => { S.cves = null; loadCVEs(el); });
+  el.querySelector('#btn-lookup').addEventListener('click', () => {
+    const id = el.querySelector('#cve-id').value.trim();
+    if (id) doAnalyzeCVE(el, { cve_id: id });
+  });
+  el.querySelector('#cve-id').addEventListener('keydown', e => {
+    if (e.key === 'Enter') el.querySelector('#btn-lookup').click();
+  });
+  el.addEventListener('click', e => {
+    if (e.target.classList.contains('ba-cve')) {
+      doAnalyzeCVE(el, { cve_data: S.cves[+e.target.dataset.i] });
+    }
+  });
+}
+
+async function loadCVEs(el) {
+  const area = el.querySelector('#cve-tbl');
+  if (S.cves) { area.innerHTML = cveTable(S.cves); return; }
+  try {
+    const r = await fetch(`${API}/api/cves?days=7&limit=15`, { headers: hdrs(false) });
+    S.cves = await r.json();
+    area.innerHTML = cveTable(S.cves);
+  } catch {
+    area.innerHTML = '<span style="color:var(--red)">Could not reach backend.</span>';
+  }
+}
+
+function cveTable(cves) {
+  if (!cves?.length) return '<p class="tdim">No CVEs found.</p>';
+  const rows = cves.map((c, i) => `<tr>
+    <td class="mono">${c.id}</td>
+    <td>${c.cvss_score ?? '—'}</td>
+    <td>${sevBadge(c.severity)}</td>
+    <td class="tdim">${(c.published || '').slice(0, 10)}</td>
+    <td class="tdesc">${trunc(c.description)}</td>
+    <td><button class="btn btn-o btn-sm ba-cve" data-i="${i}">Analyze</button></td>
+  </tr>`).join('');
+  return `<div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>CVE ID</th><th>CVSS</th><th>Severity</th><th>Published</th><th>Description</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+async function doAnalyzeCVE(el, body) {
+  const o = el.querySelector('#out');
+  o.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  await streamTo(`${API}/api/cves/analyze`, { method: 'POST', headers: hdrs(), body: JSON.stringify(body) }, o);
+}
+
+// ── View: Active Exploits ─────────────────────────────────────────────────────
+function renderExploits(el) {
+  el.innerHTML = `
+    <h1 class="vt">Active Exploits</h1>
+    <p class="vd">CISA Known Exploited Vulnerabilities — currently being weaponised in the wild.</p>
+    <div class="ctrls">
+      <button class="btn btn-o" id="btn-exp-rl">↺ Reload</button>
+    </div>
+    <div id="exp-tbl"><div class="tdim" style="font-size:.84rem">Fetching from CISA KEV…</div></div>
+    ${outEl()}
+  `;
+  loadExploits(el);
+  el.querySelector('#btn-exp-rl').addEventListener('click', () => { S.exploits = null; loadExploits(el); });
+  el.addEventListener('click', e => {
+    if (e.target.classList.contains('ba-exp')) {
+      const o = el.querySelector('#out');
+      o.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      streamTo(`${API}/api/exploits/analyze`,
+        { method: 'POST', headers: hdrs(), body: JSON.stringify({ entry: S.exploits[+e.target.dataset.i] }) }, o);
+    }
+  });
+}
+
+async function loadExploits(el) {
+  const area = el.querySelector('#exp-tbl');
+  if (S.exploits) { area.innerHTML = expTable(S.exploits); return; }
+  try {
+    const r = await fetch(`${API}/api/exploits?days=30&limit=20`, { headers: hdrs(false) });
+    S.exploits = await r.json();
+    area.innerHTML = expTable(S.exploits);
+  } catch {
+    area.innerHTML = '<span style="color:var(--red)">Could not reach backend.</span>';
+  }
+}
+
+function expTable(entries) {
+  if (!entries?.length) return '<p class="tdim">No entries found.</p>';
+  const rows = entries.map((e, i) => `<tr>
+    <td class="mono">${e.cveID}</td>
+    <td>${e.vendorProject} / ${e.product}</td>
+    <td class="tdim">${e.dateAdded}</td>
+    <td>${rnBadge(e.knownRansomwareCampaignUse)}</td>
+    <td class="tdesc">${trunc(e.shortDescription)}</td>
+    <td><button class="btn btn-o btn-sm ba-exp" data-i="${i}">Analyze</button></td>
+  </tr>`).join('');
+  return `<div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>CVE ID</th><th>Vendor / Product</th><th>Date Added</th><th>Ransomware</th><th>Description</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+// ── View: Threat Hunt ─────────────────────────────────────────────────────────
+function renderThreatHunt(el) {
+  const sugg = ['PowerShell lateral movement', 'Ransomware staging', 'Credential dumping via LSASS', 'DNS tunneling C2', 'Kerberoasting'];
+  el.innerHTML = `
+    <h1 class="vt">Threat Hunt Scenario</h1>
+    <p class="vd">Guided hunts with SIEM queries, attacker decision trees, and detection strategies.</p>
+    <div class="ctrls">
+      <div class="fg">
+        <label>Hunt topic</label>
+        <input type="text" id="hunt-in" placeholder="e.g. ${sugg[0]}">
+      </div>
+      <button class="btn btn-p" id="btn-hunt">Generate</button>
+    </div>
+    <div class="chips">${sugg.map(s => `<button class="btn btn-o chip hunt-s">${s}</button>`).join('')}</div>
+    ${outEl('Enter a topic and click Generate, or pick a suggestion.')}
+  `;
+  const inp = el.querySelector('#hunt-in');
+  el.querySelectorAll('.hunt-s').forEach(b => b.addEventListener('click', () => { inp.value = b.textContent; }));
+  el.querySelector('#btn-hunt').addEventListener('click', async e => {
+    const topic = inp.value.trim() || sugg[Math.floor(Math.random() * sugg.length)];
+    const b = e.currentTarget;
+    b.disabled = true; b.textContent = 'Generating…';
+    await streamTo(`${API}/api/threathunt`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ topic }) }, el.querySelector('#out'));
+    b.disabled = false; b.textContent = 'Generate';
+  });
+}
+
+// ── View: Concept Explainer ───────────────────────────────────────────────────
+function renderExplain(el) {
+  const ex = ['MITRE ATT&CK', 'Pass-the-Hash', 'SIEM vs SOAR', 'Living off the Land', 'Indicators of Compromise'];
+  el.innerHTML = `
+    <h1 class="vt">Concept Explainer</h1>
+    <p class="vd">Ask about any security concept and get a practitioner-level SOC breakdown.</p>
+    <div class="ctrls">
+      <div class="fg">
+        <label>Concept</label>
+        <input type="text" id="ex-in" placeholder="e.g. ${ex[0]}">
+      </div>
+      <button class="btn btn-p" id="btn-ex">Explain</button>
+    </div>
+    <div class="chips">${ex.map(s => `<button class="btn btn-o chip ex-s">${s}</button>`).join('')}</div>
+    ${outEl('Enter a concept and click Explain.')}
+  `;
+  const inp = el.querySelector('#ex-in');
+  el.querySelectorAll('.ex-s').forEach(b => b.addEventListener('click', () => { inp.value = b.textContent; }));
+  el.querySelector('#btn-ex').addEventListener('click', async e => {
+    const concept = inp.value.trim(); if (!concept) return;
+    const b = e.currentTarget;
+    b.disabled = true; b.textContent = 'Explaining…';
+    await streamTo(`${API}/api/explain`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ concept }) }, el.querySelector('#out'));
+    b.disabled = false; b.textContent = 'Explain';
+  });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') el.querySelector('#btn-ex').click(); });
+}
+
+// ── View: Knowledge Quiz ──────────────────────────────────────────────────────
+function renderQuiz(el) {
+  el.innerHTML = `
+    <h1 class="vt">Knowledge Quiz</h1>
+    <p class="vd">Scored multiple-choice questions on any cybersecurity topic, with explanations.</p>
+    <div class="ctrls">
+      <div class="fg">
+        <label>Topic</label>
+        <input type="text" id="q-topic" placeholder="e.g. Windows Event Log IDs">
+      </div>
+      <div class="fg">
+        <label>Questions</label>
+        <input type="number" id="q-num" value="5" min="1" max="15">
+      </div>
+      <button class="btn btn-p" id="btn-quiz">Generate Quiz</button>
+    </div>
+    ${outEl('Enter a topic and click Generate Quiz.')}
+  `;
+  el.querySelector('#btn-quiz').addEventListener('click', async e => {
+    const topic = el.querySelector('#q-topic').value.trim() || 'SOC Analyst Fundamentals';
+    const num   = Math.max(1, Math.min(15, +el.querySelector('#q-num').value || 5));
+    const b = e.currentTarget;
+    b.disabled = true; b.textContent = 'Generating…';
+    await streamTo(`${API}/api/quiz`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ topic, num_questions: num }) }, el.querySelector('#out'));
+    b.disabled = false; b.textContent = 'Generate Quiz';
+  });
+}
+
+// ── View: KEV Catalog ─────────────────────────────────────────────────────────
+function renderKEVStats(el) {
+  el.innerHTML = `
+    <h1 class="vt">KEV Catalog</h1>
+    <p class="vd">Full CISA Known Exploited Vulnerabilities catalog. Browse every entry, analyze any with AI.</p>
+    <div id="kev-stats"><div class="tdim" style="font-size:.84rem">Loading full catalog…</div></div>
+    <div id="kev-tbl"></div>
+    <div id="kev-pag" class="pag" style="display:none">
+      <button class="btn btn-o btn-sm" id="kev-prev">← Prev</button>
+      <span id="kev-pi"></span>
+      <button class="btn btn-o btn-sm" id="kev-next">Next →</button>
+    </div>
+    ${outEl()}
+  `;
+  loadKEV(el);
+  el.querySelector('#kev-prev').addEventListener('click', () => { if (S.kev.page > 0) { S.kev.page--; renderKEVPage(el); } });
+  el.querySelector('#kev-next').addEventListener('click', () => {
+    const tot = Math.ceil((S.kev.data?.vulnerabilities?.length || 0) / PAGE_SZ);
+    if (S.kev.page < tot - 1) { S.kev.page++; renderKEVPage(el); }
+  });
+  el.addEventListener('click', e => {
+    if (e.target.classList.contains('ba-kev')) {
+      const entry = S.kev.data.vulnerabilities[+e.target.dataset.i];
+      const o = el.querySelector('#out');
+      o.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      streamTo(`${API}/api/exploits/analyze`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ entry }) }, o);
+    }
+  });
+}
+
+async function loadKEV(el) {
+  if (S.kev.data) { renderKEVFull(el); return; }
+  try {
+    const r = await fetch(`${API}/api/kevstats`, { headers: hdrs(false) });
+    S.kev.data = await r.json();
+    S.kev.page = 0;
+    renderKEVFull(el);
+  } catch {
+    el.querySelector('#kev-stats').innerHTML = '<span style="color:var(--red)">Could not reach backend.</span>';
+  }
+}
+
+function renderKEVFull(el) {
+  const d = S.kev.data;
+  el.querySelector('#kev-stats').innerHTML = `
+    <div class="stat-row">
+      <div class="stat"><div class="stat-v">${(d.total_entries || 0).toLocaleString()}</div><div class="stat-l">Total Entries</div></div>
+      <div class="stat"><div class="stat-v">${d.catalog_version || '—'}</div><div class="stat-l">Catalog Version</div></div>
+      <div class="stat"><div class="stat-v">${(d.date_released || '').slice(0, 10) || '—'}</div><div class="stat-l">Last Released</div></div>
+    </div>
+    <p style="font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem">Top Targeted Vendors</p>
+    <div class="vendor-chips">
+      ${(d.top_vendors || []).map(([v, c]) => `<span class="vcip">${v} <em>${c}</em></span>`).join('')}
+    </div>
+  `;
+  renderKEVPage(el);
+}
+
+function renderKEVPage(el) {
+  const vulns = S.kev.data?.vulnerabilities || [];
+  const tot   = Math.ceil(vulns.length / PAGE_SZ);
+  const start = S.kev.page * PAGE_SZ;
+  const slice = vulns.slice(start, start + PAGE_SZ);
+
+  const rows = slice.map((e, i) => `<tr>
+    <td class="tdim" style="font-family:var(--mono);font-size:.74rem">${start + i + 1}</td>
+    <td class="mono">${e.cveID}</td>
+    <td>${e.vendorProject} / ${e.product}</td>
+    <td class="tdim">${e.dateAdded}</td>
+    <td>${rnBadge(e.knownRansomwareCampaignUse)}</td>
+    <td class="tdesc">${trunc(e.shortDescription)}</td>
+    <td><button class="btn btn-o btn-sm ba-kev" data-i="${start + i}">Analyze</button></td>
+  </tr>`).join('');
+
+  el.querySelector('#kev-tbl').innerHTML = `<div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>#</th><th>CVE ID</th><th>Vendor / Product</th><th>Date Added</th><th>Ransomware</th><th>Description</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+
+  const pag = el.querySelector('#kev-pag');
+  pag.style.display = 'flex';
+  el.querySelector('#kev-pi').textContent = `Page ${S.kev.page + 1} of ${tot}  (${vulns.length} entries)`;
+  el.querySelector('#kev-prev').disabled = S.kev.page === 0;
+  el.querySelector('#kev-next').disabled = S.kev.page >= tot - 1;
+}
+
+// ── View: IRIS ────────────────────────────────────────────────────────────────
+function renderIRIS(el) {
+  if (S.iris.active) { renderIRISChat(el); return; }
+  el.innerHTML = `
+    <h1 class="vt">IRIS — Incident Response Simulator</h1>
+    <p class="vd">A live cyberattack is unfolding. You are the analyst. Your decisions have consequences.</p>
+    <div id="iris-sc"><div class="tdim" style="font-size:.84rem">Loading scenarios…</div></div>
+  `;
+  loadScenarios(el);
+}
+
+async function loadScenarios(el) {
+  if (!S.scenarios) {
+    try {
+      const r = await fetch(`${API}/api/iris/scenarios`, { headers: hdrs(false) });
+      S.scenarios = await r.json();
+    } catch {
+      el.querySelector('#iris-sc').innerHTML = '<span style="color:var(--red)">Could not reach backend.</span>';
+      return;
+    }
+  }
+  const cards = Object.entries(S.scenarios)
+    .filter(([k]) => k !== '6')
+    .map(([k, s]) => `
+      <div class="sc-card">
+        <div class="diff ${diffCls(s.difficulty)}">${s.difficulty}</div>
+        <h3>${s.name}</h3>
+        <p>${s.description}</p>
+        <button class="btn btn-o btn-sm iris-go" data-k="${k}">Start</button>
+      </div>`).join('');
+
+  el.querySelector('#iris-sc').innerHTML = `
+    <div class="sc-grid">
+      ${cards}
+      <div class="sc-card">
+        <div class="diff dV">CUSTOM</div>
+        <h3>Custom Scenario</h3>
+        <p>Describe your own incident and IRIS will simulate it.</p>
+        <textarea id="iris-custom" placeholder="e.g. A disgruntled employee is exfiltrating data via a personal USB drive…"></textarea>
+        <button class="btn btn-o btn-sm" id="iris-custom-go" style="margin-top:.6rem">Start Custom</button>
+      </div>
+    </div>`;
+
+  el.querySelectorAll('.iris-go').forEach(b => b.addEventListener('click', () => startIRIS(el, b.dataset.k)));
+  el.querySelector('#iris-custom-go').addEventListener('click', () => {
+    const desc = el.querySelector('#iris-custom').value.trim();
+    if (!desc) return;
+    const prompt = `Start a custom incident response scenario based on the following description: ${desc}. Choose an appropriate difficulty level. Kick off with a realistic initial alert or trigger event. Do not reveal the full attack chain yet.`;
+    beginIRIS(el, 'Custom Scenario', prompt);
+  });
+}
+
+function startIRIS(el, key) {
+  const s = S.scenarios?.[key];
+  if (s?.prompt) beginIRIS(el, s.name, s.prompt);
+}
+
+function beginIRIS(el, name, prompt) {
+  S.iris = { active: true, name, messages: [{ role: 'user', content: prompt }] };
+  renderIRISChat(el);
+  sendIRIS(el);
+}
+
+function renderIRISChat(el) {
+  el.innerHTML = `
+    <div class="chat-shell">
+      <div class="chat-hdr">
+        <span class="cn">IRIS — ${S.iris.name}</span>
+        <div class="hdr-btns">
+          <button class="btn btn-o btn-sm" id="iris-score">End (SCORE)</button>
+          <button class="btn btn-d btn-sm" id="iris-quit">✕ Quit</button>
+        </div>
+      </div>
+      <div class="chat" id="iris-chat"></div>
+      <div class="chat-irow">
+        <input type="text" id="iris-in" placeholder="Type your analyst action…" disabled>
+        <button class="btn btn-p btn-sm" id="iris-send" disabled>Send</button>
+      </div>
+    </div>
+  `;
+
+  // Replay prior messages when navigating back
+  const chat = el.querySelector('#iris-chat');
+  for (let i = 1; i < S.iris.messages.length; i++) {
+    const m = S.iris.messages[i];
+    appendMsg(chat, m.role === 'assistant' ? 'i' : 'a', m.content);
+  }
+  // Enable input if returning mid-session
+  if (S.iris.messages.length > 1) {
+    el.querySelector('#iris-in').disabled = false;
+    el.querySelector('#iris-send').disabled = false;
+  }
+
+  el.querySelector('#iris-score').addEventListener('click', () => irisAction(el, 'SCORE'));
+  el.querySelector('#iris-quit').addEventListener('click', () => {
+    S.iris = { active: false, name: '', messages: [] };
+    navigate('iris');
+  });
+
+  const inp = el.querySelector('#iris-in');
+  el.querySelector('#iris-send').addEventListener('click', () => {
+    const action = inp.value.trim(); if (!action) return;
+    inp.value = ''; irisAction(el, action);
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { const a = inp.value.trim(); if (!a) return; inp.value = ''; irisAction(el, a); }
+  });
+}
+
+function appendMsg(chat, role, text) {
+  const d = document.createElement('div');
+  d.className = `msg msg-${role}`;
+  d.innerHTML = `<div class="msg-lbl">${role === 'i' ? 'IRIS' : 'ANALYST'}</div><div class="msg-body"></div>`;
+  d.querySelector('.msg-body').textContent = text;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  return d.querySelector('.msg-body');
+}
+
+async function sendIRIS(el) {
+  const chat = el.querySelector('#iris-chat');
+  const inp  = el.querySelector('#iris-in');
+  const send = el.querySelector('#iris-send');
+  if (inp)  inp.disabled  = true;
+  if (send) send.disabled = true;
+
+  const body = appendMsg(chat, 'i', '');
+  const text = await streamCollect(
+    `${API}/api/iris`,
+    { method: 'POST', headers: hdrs(), body: JSON.stringify({ messages: S.iris.messages }) },
+    body,
+  );
+  if (text) S.iris.messages.push({ role: 'assistant', content: text });
+
+  if (inp)  inp.disabled  = false;
+  if (send) send.disabled = false;
+  if (inp)  inp.focus();
+
+  // Detect simulation end
+  const low = text.toLowerCase();
+  if (['after-action review', 'simulation complete', 'final score', 'goodbye, analyst', 'end of simulation'].some(p => low.includes(p))) {
+    if (inp)  inp.disabled  = true;
+    if (send) send.disabled = true;
+    const nb = document.createElement('button');
+    nb.className = 'btn btn-o btn-sm';
+    nb.textContent = '↺ New Simulation';
+    nb.style.marginTop = '0.75rem';
+    nb.addEventListener('click', () => { S.iris = { active: false, name: '', messages: [] }; navigate('iris'); });
+    el.querySelector('.chat-shell').appendChild(nb);
+  }
+}
+
+async function irisAction(el, action) {
+  appendMsg(el.querySelector('#iris-chat'), 'a', action);
+  S.iris.messages.push({ role: 'user', content: action });
+  await sendIRIS(el);
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+const RENDERERS = {
+  briefing: renderBriefing, cves: renderCVEs, exploits: renderExploits,
+  threathunt: renderThreatHunt, explain: renderExplain, quiz: renderQuiz,
+  kevstats: renderKEVStats, iris: renderIRIS,
+};
+
+function navigate(id) {
+  document.querySelectorAll('.nav-item').forEach(li => li.classList.toggle('active', li.dataset.v === id));
+  const c = document.getElementById('content');
+  c.scrollTop = 0;
+  c.innerHTML = '';
+  RENDERERS[id]?.(c);
+  if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+function buildNav() {
+  const ul = document.getElementById('nav-list');
+  VIEWS.forEach(v => {
+    const li = document.createElement('li');
+    li.className = 'nav-item';
+    li.dataset.v = v.id;
+    li.innerHTML = `<span class="ic">${v.ic}</span>${v.label}`;
+    li.addEventListener('click', () => navigate(v.id));
+    ul.appendChild(li);
+  });
+}
+
+function showApp() {
+  document.getElementById('overlay').classList.add('gone');
+  document.getElementById('app').classList.add('on');
+  buildNav();
+  navigate('briefing');
+}
+
+// Key overlay events
+document.getElementById('key-save').addEventListener('click', () => {
+  const k = document.getElementById('key-in').value.trim();
+  if (!k.startsWith('sk-ant')) { alert('Please enter a valid Anthropic API key (starts with sk-ant).'); return; }
+  setKey(k); showApp();
+});
+document.getElementById('key-in').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('key-save').click(); });
+
+// Change key
+document.getElementById('chg-key').addEventListener('click', () => {
+  document.getElementById('overlay').classList.remove('gone');
+  document.getElementById('key-in').value = getKey();
+});
+
+// Hamburger
+document.getElementById('hbg').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+document.addEventListener('click', e => {
+  const sb = document.getElementById('sidebar'), hbg = document.getElementById('hbg');
+  if (window.innerWidth <= 768 && sb.classList.contains('open') && !sb.contains(e.target) && !hbg.contains(e.target))
+    sb.classList.remove('open');
+});
+
+// Boot
+if (getKey()) showApp();
+
+// ── Service Worker ────────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
