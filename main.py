@@ -40,6 +40,7 @@ from ui.display import (
     print_success,
     print_info,
     display_kev_table,
+    display_kev_catalog_page,
     display_cve_table,
     display_cisa_alerts,
     display_kev_stats,
@@ -369,14 +370,59 @@ def _prompt_iris_score(scenario_name: str) -> None:
 
 
 def handle_kev_stats() -> None:
-    print_section("CISA KEV Catalog Statistics")
-    print_info("Fetching full KEV catalog statistics...")
+    print_section("CISA KEV Catalog")
+    print_info("Fetching full KEV catalog...")
 
     with Progress(SpinnerColumn(), TextColumn("[dim]{task.description}[/dim]"), transient=True) as p:
         p.add_task("Loading KEV catalog...", total=None)
         stats = get_all_kev_stats()
 
+    if "error" in stats:
+        print_error(stats["error"])
+        return
+
     display_kev_stats(stats)
+
+    vulns = stats.get("vulnerabilities", [])
+    if not vulns:
+        return
+
+    page = 0
+    page_size = 20
+
+    while True:
+        console.print()
+        total_pages = display_kev_catalog_page(vulns, page, page_size)
+
+        nav_hint = []
+        if page > 0:
+            nav_hint.append("[n]ext / [p]rev")
+        else:
+            nav_hint.append("[n]ext")
+        nav_hint.append("enter a # to deep-dive")
+        nav_hint.append("[q]uit")
+
+        choice = prompt_user(f"Page {page + 1}/{total_pages} — {', '.join(nav_hint)}:").lower()
+
+        if choice in ("q", "quit", ""):
+            break
+        elif choice == "n" and page < total_pages - 1:
+            page += 1
+        elif choice == "p" and page > 0:
+            page -= 1
+        elif choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(vulns):
+                entry = vulns[idx]
+                stream_ai_response(
+                    f"KEV Deep Dive — {entry.get('cveID', 'Unknown')}",
+                    analyze_kev_entry(entry),
+                    border_style="orange1",
+                )
+            else:
+                print_error("Number out of range.")
+        else:
+            console.print("[dim]Unknown option.[/dim]")
 
 
 # ── Main loop ──────────────────────────────────────────────────────────────────

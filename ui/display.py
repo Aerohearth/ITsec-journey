@@ -1,7 +1,7 @@
 """
 Rich terminal UI display helpers for the SOC Trainer app.
 """
-from typing import Generator
+from typing import Generator, Optional
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -204,6 +204,47 @@ def display_kev_stats(stats: dict) -> None:
             Panel(vendor_table, title="[bold]Top Targeted Vendors[/bold]", border_style="red"),
         ])
     )
+
+
+def display_kev_catalog_page(entries: list[dict], page: int, page_size: int = 20) -> int:
+    """Display one page of KEV catalog entries. Returns total number of pages."""
+    total = len(entries)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    start = page * page_size
+    page_entries = entries[start: start + page_size]
+
+    table = Table(
+        title=f"[bold]CISA KEV Catalog — All Entries[/bold] [dim](page {page + 1}/{total_pages}, {total} total)[/dim]",
+        box=box.ROUNDED,
+        border_style="cyan",
+        header_style="bold bright_white on dark_blue",
+        show_lines=True,
+        expand=True,
+    )
+    table.add_column("#", style="dim", width=5, no_wrap=True)
+    table.add_column("CVE ID", style="bright_cyan", no_wrap=True, width=18)
+    table.add_column("Vendor / Product", style="white", width=26)
+    table.add_column("Added", style="yellow", width=12, no_wrap=True)
+    table.add_column("Ransomware?", style="red", width=12, no_wrap=True)
+    table.add_column("Description", style="dim white")
+
+    for i, e in enumerate(page_entries, start + 1):
+        ransomware = e.get("knownRansomwareCampaignUse", "Unknown")
+        ransomware_display = (
+            "[bold red]YES[/bold red]" if ransomware.lower() == "known"
+            else "[green]No[/green]"
+        )
+        table.add_row(
+            str(i),
+            e.get("cveID", "N/A"),
+            f"{e.get('vendorProject','?')} / {e.get('product','?')}",
+            e.get("dateAdded", "?"),
+            ransomware_display,
+            e.get("shortDescription", "")[:80],
+        )
+
+    console.print(table)
+    return total_pages
 
 
 # ── Streaming AI output ────────────────────────────────────────────────────────

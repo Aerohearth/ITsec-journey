@@ -58,7 +58,7 @@ def get_cisa_alerts(limit: int = 5) -> list[dict]:
 
 
 def get_all_kev_stats() -> dict:
-    """Return high-level statistics about the full KEV catalog."""
+    """Return high-level statistics and the full sorted catalog from CISA KEV."""
     try:
         response = requests.get(CISA_KEV_URL, timeout=15)
         response.raise_for_status()
@@ -67,7 +67,9 @@ def get_all_kev_stats() -> dict:
         return {"error": str(e)}
 
     vulns = data.get("vulnerabilities", [])
-    vendors = {}
+    vulns.sort(key=lambda x: x.get("dateAdded", ""), reverse=True)
+
+    vendors: dict[str, int] = {}
     for v in vulns:
         vendor = v.get("vendorProject", "Unknown")
         vendors[vendor] = vendors.get(vendor, 0) + 1
@@ -79,4 +81,5 @@ def get_all_kev_stats() -> dict:
         "catalog_version": data.get("catalogVersion", "N/A"),
         "date_released": data.get("dateReleased", "N/A"),
         "top_vendors": top_vendors,
+        "vulnerabilities": vulns,
     }
