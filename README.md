@@ -1,6 +1,6 @@
 # SocForge
 
-![GitHub Stars](https://img.shields.io/github/stars/Aerohearth/itsec-journey?style=flat-square) ![License](https://img.shields.io/github/license/Aerohearth/itsec-journey?style=flat-square)
+![GitHub Stars](https://img.shields.io/github/stars/Aerohearth/Socforge?style=flat-square) ![License](https://img.shields.io/github/license/Aerohearth/Socforge?style=flat-square)
 
 **Real-time SOC analyst training powered by live government threat data.**
 
@@ -19,25 +19,37 @@ SocForge fixes that. It pulls live data from CISA and NIST every session and use
 | # | Feature | What it does |
 |---|---------|--------------|
 | 1 | **Daily Threat Briefing** | AI-generated morning SITREP from live CISA KEV and government alert feeds |
-| 2 | **CVE Explorer** | Browse today's critical vulnerabilities from NIST NVD and deep-dive any entry |
-| 3 | **Active Exploits** | CISA Known Exploited Vulnerabilities with AI triage analysis |
-| 4 | **Threat Hunt Scenario** | Guided hunt walkthroughs with SIEM queries and attacker decision trees |
-| 5 | **Concept Explainer** | SOC-focused breakdown of any security term or framework |
-| 6 | **Knowledge Quiz** | Scored multiple-choice questions on any topic, with explanations |
-| 7 | **KEV Catalog** | Browse and deep-dive the full CISA exploit catalog — all entries, not just summaries |
+| 2 | **Recent CVE Disclosures** | Newly published critical vulnerabilities from NIST NVD — not yet exploited |
+| 3 | **Active Exploits** | CISA Known Exploited Vulnerabilities — confirmed being weaponised right now |
+| 4 | **KEV Catalog** | Browse and deep-dive the full CISA exploit catalog — all entries, paginated |
+| 5 | **Threat Hunt Scenario** | Guided hunt walkthroughs with SIEM queries and attacker decision trees |
+| 6 | **Concept Explainer** | SOC-focused breakdown of any security term or framework |
+| 7 | **Knowledge Quiz** | Scored multiple-choice questions on any topic, with explanations |
+| 8 | **IRIS — Incident Response Simulator** | Multi-turn attack scenarios across 6 difficulty-graded incidents. You make the calls, AI coaches in real time, after-action review scores your performance |
+
+> Features 2–4 are grouped into a single **Vuln Intelligence** section in the web app.
 
 ---
 
-## Quick Start
+## Quick Start — CLI
 
 **Requirements:** Python 3.10+, an [Anthropic API key](https://console.anthropic.com)
 
 ```bash
-git clone https://github.com/Aerohearth/itsec-journey.git
-cd itsec-journey
+git clone https://github.com/Aerohearth/Socforge.git
+cd Socforge
 pip install -r requirements.txt
 cp .env.example .env        # paste your ANTHROPIC_API_KEY inside
 python main.py
+```
+
+## Quick Start — Web App
+
+```bash
+pip install -r backend/requirements.txt
+cp .env.example .env        # paste your ANTHROPIC_API_KEY inside
+uvicorn backend.main:app --reload
+# open http://localhost:8000
 ```
 
 ---
@@ -47,18 +59,22 @@ python main.py
 | Layer | Technology |
 |-------|------------|
 | Runtime | Python 3.10+ |
-| AI | Claude API |
+| AI | Claude API (streaming, prompt caching, adaptive thinking) |
 | Threat data | CISA KEV API, CISA Alerts RSS, NIST NVD CVE 2.0 API |
-| UI | Rich (terminal) |
+| Web backend | FastAPI + uvicorn |
+| Web frontend | Vanilla HTML/CSS/JS — single file, no framework |
+| CLI UI | Rich (terminal) |
 
 ---
 
 ## Roadmap
 
-- [ ] Web UI — no local setup, no API key required
-- [ ] Mobile app — training on the go
-- [ ] Cert study paths — COMPTIA Security+, CySA+, CEH guided tracks
-- [ ] Waitlist open — [join at socforge.dev](https://socforge.dev) *(coming soon)*
+- [x] Web UI — FastAPI backend + vanilla JS SPA, served from one command
+- [x] Incident Response Simulator (IRIS) — multi-turn AI-coached scenarios
+- [ ] User accounts + persistent progress across sessions
+- [ ] Mobile app — PWA install already supported, native app later
+- [ ] Cert study paths — CompTIA Security+, CySA+, CEH guided tracks
+- [ ] Hosted version — [join the waitlist](https://socforge.dev) *(coming soon)*
 
 ---
 

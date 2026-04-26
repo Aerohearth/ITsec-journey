@@ -5,13 +5,13 @@ import asyncio
 import time
 from collections import defaultdict
 from datetime import date
-from typing import Optional, AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 # Allow imports from project root regardless of working directory
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import anthropic
-from fastapi import FastAPI, Header, Depends, HTTPException, Query, Request
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -34,15 +34,20 @@ app.add_middleware(
 )
 
 
-# ── Rate limiting (active only when server manages the API key) ───────────────
+# ── Startup check ─────────────────────────────────────────────────────────────
+
+if not ANTHROPIC_API_KEY:
+    import warnings
+    warnings.warn("ANTHROPIC_API_KEY is not set — all AI endpoints will return errors.", stacklevel=1)
+
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
 
 _rate_store: dict[str, list[float]] = defaultdict(list)
-RATE_LIMIT  = 20    # requests
+RATE_LIMIT  = 20    # AI requests per window
 RATE_WINDOW = 3600  # seconds (1 hour)
 
 async def rate_limit(request: Request) -> None:
-    if not ANTHROPIC_API_KEY:
-        return  # user supplies own key — no need to limit
     ip  = request.client.host
     now = time.time()
     _rate_store[ip] = [t for t in _rate_store[ip] if now - t < RATE_WINDOW]
@@ -54,23 +59,10 @@ async def rate_limit(request: Request) -> None:
     _rate_store[ip].append(now)
 
 
-# ── API key resolution ────────────────────────────────────────────────────────
-
-def resolve_key(x_api_key: Optional[str] = Header(None, alias="X-Api-Key")) -> str:
-    key = x_api_key or ANTHROPIC_API_KEY
-    if not key:
-        raise HTTPException(status_code=401, detail="No Anthropic API key provided. Set X-Api-Key header.")
-    return key
-
-
 # ── Async Claude streaming helpers ────────────────────────────────────────────
 
-async def _stream(
-    prompt: str,
-    api_key: str,
-    use_thinking: bool = False,
-) -> AsyncGenerator[str, None]:
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+async def _stream(prompt: str, use_thinking: bool = False) -> AsyncGenerator[str, None]:
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
     kwargs = {
         "model": MODEL,
         "max_tokens": MAX_TOKENS,
@@ -91,13 +83,13 @@ async def _stream(
             async for text in stream.text_stream:
                 yield text
     except anthropic.AuthenticationError:
-        yield "\n\n[ERROR] Invalid API key. Check your Anthropic API key and try again."
+        yield "\n\n[ERROR] Server API key is invalid or not set. Contact the administrator."
     except Exception as e:
         yield f"\n\n[ERROR] {e}"
 
 
-async def _stream_iris(messages: list[dict], api_key: str) -> AsyncGenerator[str, None]:
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+async def _stream_iris(messages: list[dict]) -> AsyncGenerator[str, None]:
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
     try:
         async with client.messages.stream(
             model=MODEL,
@@ -115,7 +107,7 @@ async def _stream_iris(messages: list[dict], api_key: str) -> AsyncGenerator[str
             async for text in stream.text_stream:
                 yield text
     except anthropic.AuthenticationError:
-        yield "\n\n[ERROR] Invalid API key."
+        yield "\n\n[ERROR] Server API key is invalid or not set. Contact the administrator."
     except Exception as e:
         yield f"\n\n[ERROR] {e}"
 
@@ -273,13 +265,13 @@ class IrisRequest(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.post("/api/briefing")
-async def briefing(api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
+async def briefing(_: None = Depends(rate_limit)):
     kev_entries, cisa_alerts = await asyncio.gather(
         asyncio.to_thread(get_recent_kev_entries, 14, 5),
         asyncio.to_thread(get_cisa_alerts, 3),
     )
     prompt = _briefing_prompt(kev_entries, cisa_alerts)
-    return StreamingResponse(_stream(prompt, api_key), media_type="text/plain; charset=utf-8")
+    return StreamingResponse(_stream(prompt), media_type="text/plain; charset=utf-8")
 
 
 @app.get("/api/cves")
@@ -289,7 +281,7 @@ async def cves(days: int = Query(7), limit: int = Query(10)):
 
 
 @app.post("/api/cves/analyze")
-async def cve_analyze(req: CveAnalyzeRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
+async def cve_analyze(req: CveAnalyzeRequest, _: None = Depends(rate_limit)):
     if req.cve_data:
         cve_data = req.cve_data
     elif req.cve_id:
@@ -301,10 +293,7 @@ async def cve_analyze(req: CveAnalyzeRequest, api_key: str = Depends(resolve_key
     else:
         raise HTTPException(status_code=400, detail="Provide cve_id or cve_data.")
     prompt = _cve_analyze_prompt(cve_data)
-    return StreamingResponse(
-        _stream(prompt, api_key, use_thinking=True),
-        media_type="text/plain; charset=utf-8",
-    )
+    return StreamingResponse(_stream(prompt, use_thinking=True), media_type="text/plain; charset=utf-8")
 
 
 @app.get("/api/exploits")
@@ -314,34 +303,28 @@ async def exploits(days: int = Query(30), limit: int = Query(15)):
 
 
 @app.post("/api/exploits/analyze")
-async def exploits_analyze(req: KevAnalyzeRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
+async def exploits_analyze(req: KevAnalyzeRequest, _: None = Depends(rate_limit)):
     prompt = _kev_analyze_prompt(req.entry)
-    return StreamingResponse(
-        _stream(prompt, api_key, use_thinking=True),
-        media_type="text/plain; charset=utf-8",
-    )
+    return StreamingResponse(_stream(prompt, use_thinking=True), media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/threathunt")
-async def threathunt(req: ThreatHuntRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
+async def threathunt(req: ThreatHuntRequest, _: None = Depends(rate_limit)):
     prompt = _threathunt_prompt(req.topic)
-    return StreamingResponse(
-        _stream(prompt, api_key, use_thinking=True),
-        media_type="text/plain; charset=utf-8",
-    )
+    return StreamingResponse(_stream(prompt, use_thinking=True), media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/explain")
-async def explain(req: ExplainRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
+async def explain(req: ExplainRequest, _: None = Depends(rate_limit)):
     prompt = _explain_prompt(req.concept)
-    return StreamingResponse(_stream(prompt, api_key), media_type="text/plain; charset=utf-8")
+    return StreamingResponse(_stream(prompt), media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/quiz")
-async def quiz(req: QuizRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
+async def quiz(req: QuizRequest, _: None = Depends(rate_limit)):
     num = max(1, min(req.num_questions, 15))
     prompt = _quiz_prompt(req.topic, num)
-    return StreamingResponse(_stream(prompt, api_key), media_type="text/plain; charset=utf-8")
+    return StreamingResponse(_stream(prompt), media_type="text/plain; charset=utf-8")
 
 
 @app.get("/api/kevstats")
@@ -364,23 +347,15 @@ async def iris_scenarios():
 
 
 @app.post("/api/iris")
-async def iris(req: IrisRequest, api_key: str = Depends(resolve_key), _: None = Depends(rate_limit)):
+async def iris(req: IrisRequest, _: None = Depends(rate_limit)):
     if not req.messages:
         raise HTTPException(status_code=400, detail="messages list is required.")
-    return StreamingResponse(
-        _stream_iris(req.messages, api_key),
-        media_type="text/plain; charset=utf-8",
-    )
-
-
-@app.get("/api/config")
-async def config():
-    return {"server_key_configured": bool(ANTHROPIC_API_KEY)}
+    return StreamingResponse(_stream_iris(req.messages), media_type="text/plain; charset=utf-8")
 
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "1.2.0"}
+    return {"status": "ok", "version": "1.3.0"}
 
 
 # Serve frontend — mounted last so /api/* routes take priority

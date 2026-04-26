@@ -29,25 +29,8 @@
     html, body { height: 100%; }
     body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 0.9rem; line-height: 1.6; overflow: hidden; }
 
-    /* ── API Key Overlay ── */
-    #overlay {
-      position: fixed; inset: 0; background: var(--bg);
-      display: flex; align-items: center; justify-content: center; z-index: 100;
-    }
-    #overlay.gone { display: none; }
-
-    .ov-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 2.5rem; width: 100%; max-width: 420px; text-align: center;
-    }
-    .ov-logo { font-family: var(--mono); font-size: 1.3rem; color: var(--cyan); margin-bottom: 0.35rem; }
-    .ov-logo span { color: var(--dim); }
-    .ov-card h2 { font-size: 1rem; color: var(--text); margin-bottom: 0.4rem; }
-    .ov-card p  { color: var(--dim); font-size: 0.82rem; margin-bottom: 1.75rem; }
-    .ov-card a  { color: var(--cyan); }
-
     /* ── App Shell ── */
-    #app { display: none; height: 100vh; }
+    #app { display: grid; grid-template-columns: var(--sw) 1fr; height: 100vh; }
     #app.on { display: grid; grid-template-columns: var(--sw) 1fr; }
 
     /* ── Sidebar ── */
@@ -229,7 +212,7 @@
     @media (max-width: 768px) {
       body { overflow: auto; }
       #hbg { display: block; }
-      #app.on { grid-template-columns: 1fr; }
+      #app { grid-template-columns: 1fr; }
       #sidebar {
         position: fixed; left: 0; top: 0; bottom: 0; width: var(--sw);
         transform: translateX(-100%); transition: transform 0.22s; z-index: 40;
@@ -245,23 +228,6 @@
 </head>
 <body>
 
-<!-- API Key Overlay -->
-<div id="overlay">
-  <div class="ov-card">
-    <div class="ov-logo">Soc<span>Forge</span></div>
-    <h2>Enter your Anthropic API Key</h2>
-    <p>Stored in your browser only. Sent to the local backend running on your machine — never leaves your device.</p>
-    <div class="fg" style="text-align:left;margin-bottom:0.75rem">
-      <label>Anthropic API Key</label>
-      <input type="password" id="key-in" placeholder="sk-ant-api03-…">
-    </div>
-    <button class="btn btn-p" style="width:100%" id="key-save">Save &amp; Launch</button>
-    <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--dim)">
-      Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>
-    </p>
-  </div>
-</div>
-
 <!-- Mobile hamburger -->
 <button id="hbg">☰</button>
 
@@ -270,10 +236,6 @@
   <nav id="sidebar">
     <div class="sf-logo">Soc<span>Forge</span></div>
     <ul class="nav-list" id="nav-list"></ul>
-    <div class="sb-footer">
-      <div class="sb-url">⬡ localhost:8000</div>
-      <button class="btn btn-o btn-sm" id="chg-key" style="width:100%">⚙ Change API Key</button>
-    </div>
   </nav>
   <main id="content"></main>
 </div>
@@ -302,14 +264,8 @@ const S = {
 };
 const PAGE_SZ = 20;
 
-// ── Key utils ─────────────────────────────────────────────────────────────────
-const getKey = () => localStorage.getItem('sf_key') || '';
-const setKey = k  => localStorage.setItem('sf_key', k.trim());
-
 function hdrs(json = true) {
-  const h = { 'X-Api-Key': getKey() };
-  if (json) h['Content-Type'] = 'application/json';
-  return h;
+  return json ? { 'Content-Type': 'application/json' } : {};
 }
 
 // ── Streaming ─────────────────────────────────────────────────────────────────
@@ -907,27 +863,6 @@ function buildNav() {
   });
 }
 
-function showApp() {
-  document.getElementById('overlay').classList.add('gone');
-  document.getElementById('app').classList.add('on');
-  buildNav();
-  navigate('briefing');
-}
-
-// Key overlay events
-document.getElementById('key-save').addEventListener('click', () => {
-  const k = document.getElementById('key-in').value.trim();
-  if (!k.startsWith('sk-ant')) { alert('Please enter a valid Anthropic API key (starts with sk-ant).'); return; }
-  setKey(k); showApp();
-});
-document.getElementById('key-in').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('key-save').click(); });
-
-// Change key
-document.getElementById('chg-key').addEventListener('click', () => {
-  document.getElementById('overlay').classList.remove('gone');
-  document.getElementById('key-in').value = getKey();
-});
-
 // Hamburger
 document.getElementById('hbg').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
 document.addEventListener('click', e => {
@@ -936,15 +871,9 @@ document.addEventListener('click', e => {
     sb.classList.remove('open');
 });
 
-// Boot — check if server manages its own key before showing key overlay
-(async () => {
-  try {
-    const res = await fetch(`${API}/api/config`);
-    const cfg = await res.json();
-    if (cfg.server_key_configured) { showApp(); return; }
-  } catch { /* backend unreachable — fall through */ }
-  if (getKey()) showApp();
-})();
+// Boot
+buildNav();
+navigate('briefing');
 
 // ── Service Worker ────────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
