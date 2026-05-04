@@ -10,10 +10,11 @@ from typing import AsyncGenerator, Optional
 # Allow imports from project root regardless of working directory
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import stripe
 import anthropic
 from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -22,6 +23,9 @@ from fetchers.nvd import get_recent_critical_cves, get_cve_by_id
 from processors.ai_processor import SYSTEM_PROMPT
 from processors.ir_simulator import IRIS_SYSTEM_PROMPT, SCENARIOS, build_custom_prompt
 from config import MODEL, MAX_TOKENS, ANTHROPIC_API_KEY
+
+STRIPE_SECRET_KEY  = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_PRO_PRICE_ID = os.environ.get("STRIPE_PRO_PRICE_ID", "")
 
 app = FastAPI(title="SocForge API", version="1.2.0")
 
@@ -355,10 +359,96 @@ async def iris(req: IrisRequest, _: None = Depends(rate_limit)):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "1.3.0"}
+    return {"status": "ok", "version": "1.4.0"}
 
 
-# Serve frontend — mounted last so /api/* routes take priority
+# ── Stripe ────────────────────────────────────────────────────────────────────
+
+@app.post("/api/create-checkout-session")
+async def create_checkout_session(request: Request):
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Payment not configured yet.")
+    stripe.api_key = STRIPE_SECRET_KEY
+    base = str(request.base_url).rstrip("/")
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{"price": STRIPE_PRO_PRICE_ID, "quantity": 1}],
+            mode="subscription",
+            success_url=f"{base}/success",
+            cancel_url=f"{base}/",
+        )
+        return {"url": session.url}
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=400, detail=str(e.user_message))
+
+
+@app.get("/api/subscription-status")
+async def subscription_status(email: str = Query(...)):
+    if not STRIPE_SECRET_KEY:
+        return {"tier": "free", "active": False}
+    stripe.api_key = STRIPE_SECRET_KEY
+    try:
+        customers = stripe.Customer.list(email=email, limit=1)
+        if customers.data:
+            subs = stripe.Subscription.list(
+                customer=customers.data[0].id, status="active", limit=1
+            )
+            if subs.data:
+                return {"tier": "pro", "active": True}
+    except Exception:
+        pass
+    return {"tier": "free", "active": False}
+
+
+# ── Page routes (must be before static mount) ─────────────────────────────────
+
 _frontend = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+
+
+@app.get("/")
+async def landing():
+    return FileResponse(os.path.join(_frontend, "landing.html"))
+
+
+@app.get("/app")
+async def app_page():
+    return FileResponse(os.path.join(_frontend, "index.html"))
+
+
+@app.get("/success")
+async def success():
+    return HTMLResponse("""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SocForge — You're Pro</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #080c10; color: #cdd9e5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; padding: 2rem; }
+    .card { background: #0d1117; border: 1px solid #1e2d3d; border-radius: 12px; padding: 3rem 2.5rem; max-width: 420px; }
+    .logo { font-family: monospace; font-size: 1.1rem; color: #00d4ff; margin-bottom: 1.5rem; }
+    h1 { font-size: 1.5rem; color: #fff; margin-bottom: 0.75rem; }
+    p { color: #768390; font-size: 0.9rem; margin-bottom: 2rem; line-height: 1.6; }
+    a { display: inline-block; background: #00d4ff; color: #000; padding: 0.6rem 1.5rem;
+        border-radius: 6px; font-weight: 600; text-decoration: none; font-size: 0.9rem; }
+    a:hover { background: #0099bb; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">SocForge</div>
+    <h1>You're now Pro.</h1>
+    <p>Your subscription is active. All features are unlocked — start training.</p>
+    <a href="/app">Open SocForge</a>
+  </div>
+</body>
+</html>""")
+
+
+# ── Static assets (manifest, sw.js, etc.) — mounted last ─────────────────────
+
 if os.path.isdir(_frontend):
-    app.mount("/", StaticFiles(directory=_frontend, html=True), name="frontend")
+    app.mount("/", StaticFiles(directory=_frontend), name="frontend")

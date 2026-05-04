@@ -57,6 +57,8 @@
     .nav-item.active { color: var(--cyan); border-left-color: var(--cyan); background: rgba(0,212,255,0.05); }
     .nav-item .ic { font-size: 0.82rem; width: 1.1rem; text-align: center; }
 
+    .sb-footer { padding: 0.75rem 1rem; border-top: 1px solid var(--border); flex-shrink: 0; }
+
     .sb-footer {
       padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); flex-shrink: 0;
     }
@@ -236,6 +238,9 @@
   <nav id="sidebar">
     <div class="sf-logo">Soc<span>Forge</span></div>
     <ul class="nav-list" id="nav-list"></ul>
+    <div class="sb-footer">
+      <button class="btn btn-p btn-sm" id="btn-upgrade" style="width:100%">⚡ Upgrade to Pro</button>
+    </div>
   </nav>
   <main id="content"></main>
 </div>
@@ -345,7 +350,7 @@ function outEl(hint = 'Output will appear here…') {
 function renderBriefing(el) {
   el.innerHTML = `
     <h1 class="vt">Daily Threat Briefing</h1>
-    <p class="vd">Live data from CISA KEV + government alerts, synthesised into your morning SITREP.</p>
+    <p class="vd">Start your day with an AI-generated summary of threats being exploited right now.</p>
     <div class="ctrls">
       <button class="btn btn-p" id="btn-brief">Generate Briefing</button>
     </div>
@@ -370,7 +375,7 @@ function renderVuln(el) {
   const active = S.vuln.tab;
   el.innerHTML = `
     <h1 class="vt">Vulnerability Intelligence</h1>
-    <p class="vd">Three views on the same threat landscape — freshly disclosed, actively exploited, and the full catalog.</p>
+    <p class="vd">Browse live CVEs, active exploits, and CISA's known exploited vulnerabilities in one place.</p>
     <div class="tabs">
       ${VULN_TABS.map(t => `<div class="tab${t.id === active ? ' active' : ''}" data-tab="${t.id}">${t.label}</div>`).join('')}
     </div>
@@ -595,7 +600,7 @@ function renderThreatHunt(el) {
   const sugg = ['PowerShell lateral movement', 'Ransomware staging', 'Credential dumping via LSASS', 'DNS tunneling C2', 'Kerberoasting'];
   el.innerHTML = `
     <h1 class="vt">Threat Hunt Scenario</h1>
-    <p class="vd">Guided hunts with SIEM queries, attacker decision trees, and detection strategies.</p>
+    <p class="vd">Walk through a guided hunt scenario with SIEM queries and attacker decision trees.</p>
     <div class="ctrls">
       <div class="fg">
         <label>Hunt topic</label>
@@ -622,7 +627,7 @@ function renderExplain(el) {
   const ex = ['MITRE ATT&CK', 'Pass-the-Hash', 'SIEM vs SOAR', 'Living off the Land', 'Indicators of Compromise'];
   el.innerHTML = `
     <h1 class="vt">Concept Explainer</h1>
-    <p class="vd">Ask about any security concept and get a practitioner-level SOC breakdown.</p>
+    <p class="vd">Type any security term or framework and get a SOC-focused breakdown in plain English.</p>
     <div class="ctrls">
       <div class="fg">
         <label>Concept</label>
@@ -649,7 +654,7 @@ function renderExplain(el) {
 function renderQuiz(el) {
   el.innerHTML = `
     <h1 class="vt">Knowledge Quiz</h1>
-    <p class="vd">Scored multiple-choice questions on any cybersecurity topic, with explanations.</p>
+    <p class="vd">Test yourself on any topic with scored multiple-choice questions and full explanations.</p>
     <div class="ctrls">
       <div class="fg">
         <label>Topic</label>
@@ -678,7 +683,7 @@ function renderIRIS(el) {
   if (S.iris.active) { renderIRISChat(el); return; }
   el.innerHTML = `
     <h1 class="vt">IRIS — Incident Response Simulator</h1>
-    <p class="vd">A live cyberattack is unfolding. You are the analyst. Your decisions have consequences.</p>
+    <p class="vd">Run a live incident response simulation — make real decisions, get AI coaching, earn a score.</p>
     <div id="iris-sc"><div class="tdim" style="font-size:.84rem">Loading scenarios…</div></div>
   `;
   loadScenarios(el);
@@ -862,6 +867,19 @@ function buildNav() {
     ul.appendChild(li);
   });
 }
+
+// Upgrade to Pro
+document.getElementById('btn-upgrade').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-upgrade');
+  btn.textContent = 'Redirecting…'; btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/create-checkout-session`, { method: 'POST' });
+    const data = await res.json();
+    if (data.url) { window.location.href = data.url; return; }
+    alert(data.detail || 'Payment not configured yet.');
+  } catch { alert('Could not reach backend.'); }
+  btn.textContent = '⚡ Upgrade to Pro'; btn.disabled = false;
+});
 
 // Hamburger
 document.getElementById('hbg').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
